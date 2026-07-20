@@ -1,0 +1,32 @@
+{
+  "background_color": "#111111",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "Shuttle Smash Tracker",
+  "orientation": "any",
+  "scope": "/BadmintonTournamentApp/",
+  "short_name": "ShuttleSmash",
+  "start_url": "/BadmintonTournamentApp/",
+  "theme_color": "#ffd84d",
+  "icons": [
+    {
+      "src": "https://hamzaskr.github.io/BadmintonTournamentApp/favicon.png",
+      "type": "image/png",
+      "sizes": "32x32",
+      "isSquare": true,
+      "isPng": true,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 32,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    }
+  ],
+  "id": "io.github.hamzaskr.shuttlesmash",
+  "description": "Streamlined single-court badminton tournament manager and dynamic bracket engine.",
+  "lang": "en",
+  "categories": [
+    "sports"
+  ]
+}
