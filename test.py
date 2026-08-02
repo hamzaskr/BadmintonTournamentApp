@@ -64,8 +64,8 @@ def score_match(page: Page, card_id: str, p1_score: int, p2_score: int):
 # ==========================================
 
 def test_roster_minimum_players(page: Page):
-    """Validates that a tournament cannot start with fewer than 3 players."""
-    setup_roster(page, ["Alice", "Bob"])
+    """Validates that a single-player roster cannot start a tournament."""
+    setup_roster(page, ["Alice"])
     page.locator("#start-tournament-btn").click()
     
     error = page.locator("#setup-error-alert")
@@ -252,6 +252,29 @@ def test_state_restores_on_reload(page: Page):
     
     # Score should still be 11
     expect(page.locator("#group-card-0 .s1-val")).to_have_value("11")
+
+def test_two_player_roster_triggers_duel_mode(page: Page):
+    """Validates that a two-player roster automatically starts a 1v1 duel flow."""
+    setup_roster(page, ["Alice", "Bob"])
+    page.locator("#start-tournament-btn").click()
+
+    expect(page.locator("#view-matches")).to_have_class(re.compile(r"active"))
+    expect(page.locator("#matches-container .match-card")).to_have_count(1)
+    expect(page.locator("#tab-playoffs")).to_be_disabled()
+    expect(page.locator("#view-playoffs")).not_to_be_visible()
+
+
+def test_duel_completion_actions_are_visible(page: Page):
+    """Validates that a completed 1v1 duel shows Play Next Match and Share Win actions."""
+    setup_roster(page, ["Alice", "Bob"])
+    page.locator("#start-tournament-btn").click()
+
+    score_match(page, "group-card-0", 11, 7)
+
+    expect(page.locator(".champion-reveal-banner")).to_be_visible()
+    expect(page.locator("text=Play Next Match")).to_be_visible()
+    expect(page.locator("text=Share Win")).to_be_visible()
+
 
 def test_tournament_reset(page: Page):
     """Tests the destructive reset capability in the settings modal."""
