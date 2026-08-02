@@ -1,0 +1,56 @@
+{
+  "id": "t_1710000000002",
+  "name": "Badminton Kings Quad Showcase",
+  "isTournamentActive": true,
+  "mode": "tournament",
+  "players": [
+    "Lin Dan",
+    "Lee Chong Wei",
+    "Viktor Axelsen",
+    "Kento Momota"
+  ],
+  "groupMatches": [
+    { "p1": "Lin Dan", "p2": "Kento Momota", "s1": 21, "s2": 18 },
+    { "p1": "Lee Chong Wei", "p2": "Viktor Axelsen", "s1": 19, "s2": 21 },
+    { "p1": "Lin Dan", "p2": "Viktor Axelsen", "s1": 21, "s2": 17 },
+    { "p1": "Lee Chong Wei", "p2": "Kento Momota", "s1": 21, "s2": 15 },
+    { "p1": "Lin Dan", "p2": "Lee Chong Wei", "s1": 21, "s2": 19 },
+    { "p1": "Viktor Axelsen", "p2": "Kento Momota", "s1": 21, "s2": 16 }
+  ],
+  "playoffBracketType": "SF",
+  "playoffMatches": {
+    "sf1": {
+      "p1": "Lin Dan",
+      "p2": "Kento Momota",
+      "s1": 21,
+      "s2": 18,
+      "label": "SF 1 (1v4)"
+    },
+    "sf2": {
+      "p1": "Viktor Axelsen",
+      "p2": "Lee Chong Wei",
+      "s1": 19,
+      "s2": 21,
+      "label": "SF 2 (2v3)"
+    },
+    "final": {
+      "p1": "Lin Dan",
+      "p2": "Lee Chong Wei",
+      "s1": "",
+      "s2": "",
+      "label": "Championship"
+    },
+    "third": {
+      "p1": "Kento Momota",
+      "p2": "Viktor Axelsen",
+      "s1": "",
+      "s2": "",
+      "label": "Bronze Final"
+    }
+  },
+  "duelResultSaved": false,
+  "rules": {
+    "maxPointsPerMatch": 21,
+    "allowTies": false
+  }
+}

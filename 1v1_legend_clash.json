@@ -1,0 +1,25 @@
+{
+  "id": "t_1710000000001",
+  "name": "1v1 Exhibition: Axelsen vs Momota",
+  "isTournamentActive": true,
+  "mode": "duel",
+  "players": [
+    "Viktor Axelsen",
+    "Kento Momota"
+  ],
+  "groupMatches": [
+    {
+      "p1": "Viktor Axelsen",
+      "p2": "Kento Momota",
+      "s1": 21,
+      "s2": 19
+    }
+  ],
+  "playoffBracketType": "F",
+  "playoffMatches": {},
+  "duelResultSaved": true,
+  "rules": {
+    "maxPointsPerMatch": 21,
+    "allowTies": false
+  }
+}

@@ -201,6 +201,99 @@
 
         .config-input:disabled { background-color: var(--court-grey); cursor: not-allowed; }
 
+        .duel-mode-card {
+            margin-top: 24px;
+            padding: 24px;
+            border: 2px solid var(--void-black);
+            border-radius: 12px;
+            background: linear-gradient(135deg, #fff8d8, var(--pure-white));
+        }
+
+        .duel-mode-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .duel-mode-header h3 {
+            font-family: var(--font-heading);
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--void-black);
+            margin-bottom: 4px;
+        }
+
+        .duel-mode-header p {
+            font-size: 0.95rem;
+            color: var(--void-black);
+            opacity: 0.8;
+            font-weight: 600;
+        }
+
+        .duel-mode-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 2px solid var(--void-black);
+            background: var(--electric-yellow);
+            color: var(--void-black);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            flex-shrink: 0;
+        }
+
+        .duel-input-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .duel-input-grid input {
+            width: 100%;
+        }
+
+        .duel-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .duel-actions .btn {
+            flex: 1;
+        }
+
+        .duel-history-item {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .duel-history-main {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+        }
+
+        .duel-history-main small {
+            font-size: 0.8rem;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .duel-history-date {
+            font-size: 0.75rem;
+            color: #777;
+            font-weight: 700;
+            align-self: flex-end;
+        }
+
         .btn {
             padding: 14px 28px; border: 2px solid var(--void-black); border-radius: 8px; 
             font-family: var(--font-body); font-weight: 700; font-size: 1rem; 
@@ -216,6 +309,26 @@
         
         .btn-action { background-color: var(--action-orange); color: var(--pure-white); width: 100%; }
         .btn-action:hover { background-color: #E04E34; }
+
+        .btn-share {
+            background: linear-gradient(135deg, #111111, #2b2b2b);
+            color: var(--pure-white);
+            width: auto;
+            min-width: 220px;
+            border-color: var(--void-black);
+            box-shadow: 0 6px 0 var(--void-black);
+        }
+
+        .btn-share:hover {
+            transform: translateY(-1px);
+            background: linear-gradient(135deg, #1d1d1d, #3d3d3d);
+        }
+
+        .btn-share:disabled {
+            opacity: 0.7;
+            transform: none;
+            pointer-events: none;
+        }
 
         .btn-icon { width: 52px; padding: 0; background: var(--pure-white); color: var(--void-black); }
         .btn-icon:hover { background: var(--court-grey); }
@@ -339,7 +452,7 @@
         .playoff-tier-title { font-family: var(--font-heading); font-size: 1.1rem; text-transform: uppercase; color: var(--pure-white); font-weight: 700; border-bottom: 2px solid var(--court-grey); padding-bottom: 12px; margin-bottom: 8px; }
 
         .champion-reveal-banner {
-            background: var(--electric-yellow);
+            background: linear-gradient(135deg, var(--electric-yellow), var(--action-orange));
             border: 4px solid var(--void-black); border-radius: 12px; padding: 40px 24px; text-align: center;
             margin-bottom: 32px; animation: bannerReveal 0.4s ease-out forwards;
         }
@@ -496,6 +609,10 @@
                 <input type="number" id="max-points-input" class="config-input" value="10" min="1" max="999">
             </div>
 
+            <div class="roster-status-alert" style="margin-top: 16px; border-left-color: var(--electric-yellow);">
+                <strong>Auto mode:</strong> Enter exactly 2 players to launch a 1v1 duel. Enter 3 or more players to launch a tournament.
+            </div>
+
             <div id="setup-error-alert" class="form-error-alert"></div>
             <button id="start-tournament-btn" class="btn btn-action" style="margin-top: 8px;" onclick="startTournament()">Start Tournament</button>
         </div>
@@ -588,22 +705,246 @@
         id: "",
         name: "",
         isTournamentActive: false,
+        mode: 'tournament',
         players: [],
         groupMatches: [],
         playoffBracketType: 'SF',
         playoffMatches: {},
+        duelResultSaved: false,
         rules: {
             maxPointsPerMatch: 11,
             allowTies: false
         }
     };
 
+    const DUEL_STORAGE_KEY = 'duel_history_v1';
+    const DUEL_API_ENDPOINT = window.location.protocol === 'file:' ? 'http://localhost:3000/api/duels' : '/api/duels';
+    let duelHistory = [];
+
     const store = localforage.createInstance({ name: "TournamentManager_States" });
     const indexStore = localforage.createInstance({ name: "TournamentManager_Metadata" });
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function showDuelError(message) {
+        const alert = document.getElementById('duel-error-alert');
+        alert.textContent = message;
+        alert.style.display = 'block';
+    }
+
+    function hideDuelError() {
+        const alert = document.getElementById('duel-error-alert');
+        alert.textContent = '';
+        alert.style.display = 'none';
+    }
+
+    function showDuelStatus(message) {
+        const banner = document.getElementById('duel-status-banner');
+        banner.textContent = message;
+        banner.style.display = 'block';
+    }
+
+    function hideDuelStatus() {
+        const banner = document.getElementById('duel-status-banner');
+        banner.textContent = '';
+        banner.style.display = 'none';
+    }
+
+    function collectRosterEntries() {
+        const playerInputs = Array.from(document.querySelectorAll('.player-name-input'));
+        const names = [];
+        const nameSet = new Set();
+
+        for (const input of playerInputs) {
+            const name = input.value.trim();
+            if (!name) return { error: 'Player names cannot be empty.' };
+            if (!/^[a-zA-Z0-9\s.\-_']+$/.test(name)) return { error: 'Names contain invalid special characters.' };
+            if (name.length > 24) return { error: 'Names must not exceed 24 characters.' };
+            if (nameSet.has(name.toLowerCase())) return { error: 'Athlete names must be unique.' };
+            nameSet.add(name.toLowerCase());
+            names.push(name);
+        }
+
+        return { names };
+    }
+
+    function setActiveModeUI() {
+        const isActive = activeTournament.isTournamentActive;
+        const isDuel = isActive && activeTournament.mode === 'duel';
+
+        ['tab-matches', 'tab-playoffs', 'tab-standings'].forEach(id => {
+            const button = document.getElementById(id);
+            if (button) {
+                button.disabled = !isActive || (id === 'tab-playoffs' && isDuel);
+            }
+        });
+
+        if (!isActive) {
+            document.getElementById('matches-to-playoffs-action').style.display = 'none';
+            document.getElementById('playoffs-to-leaderboard-action').style.display = 'none';
+            document.getElementById('champion-announcement-zone').innerHTML = '';
+            document.getElementById('bracket-lock').style.display = 'block';
+            document.getElementById('bracket-container').style.display = 'none';
+        }
+    }
+
+    function renderDuelHistory() {
+        const container = document.getElementById('duel-history-list');
+        if (!container) return;
+
+        if (!duelHistory.length) {
+            container.innerHTML = '<div class="dashboard-empty">No 1v1 matches recorded yet.</div>';
+            return;
+        }
+
+        container.innerHTML = duelHistory.slice(0, 8).map(item => {
+            const winnerLabel = item.winner ? `Winner: ${escapeHtml(item.winner)}` : 'Result: Tie';
+            const scoreLabel = `${escapeHtml(item.player1)} ${item.score1} - ${item.score2} ${escapeHtml(item.player2)}`;
+            const dateLabel = new Date(item.createdAt).toLocaleString();
+            return `
+                <div class="dashboard-item duel-history-item">
+                    <div class="duel-history-main">
+                        <span title="${scoreLabel}">${scoreLabel}</span>
+                        <small>${winnerLabel}</small>
+                    </div>
+                    <span class="duel-history-date">${escapeHtml(dateLabel)}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function loadDuelHistory() {
+        try {
+            const response = await fetch(DUEL_API_ENDPOINT, { headers: { Accept: 'application/json' } });
+            if (response.ok) {
+                const payload = await response.json();
+                if (Array.isArray(payload.duels)) {
+                    duelHistory = payload.duels;
+                    renderDuelHistory();
+                    return duelHistory;
+                }
+            }
+        } catch (error) {
+            console.warn('Backend duel history unavailable, falling back to browser storage.', error);
+        }
+
+        const saved = localStorage.getItem(DUEL_STORAGE_KEY);
+        if (saved) {
+            try {
+                duelHistory = JSON.parse(saved);
+            } catch (error) {
+                duelHistory = [];
+                console.warn('Failed to parse saved duel history', error);
+            }
+        } else {
+            duelHistory = [];
+        }
+
+        renderDuelHistory();
+        return duelHistory;
+    }
+
+    async function persistDuelRecord(record) {
+        try {
+            const response = await fetch(DUEL_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(record)
+            });
+
+            if (response.ok) {
+                const payload = await response.json();
+                if (Array.isArray(payload.duels)) {
+                    duelHistory = payload.duels;
+                    renderDuelHistory();
+                    return payload.duel;
+                }
+            }
+        } catch (error) {
+            console.warn('Backend duel persistence unavailable, falling back to browser storage.', error);
+        }
+
+        duelHistory = [record, ...duelHistory].slice(0, 12);
+        localStorage.setItem(DUEL_STORAGE_KEY, JSON.stringify(duelHistory));
+        renderDuelHistory();
+        return record;
+    }
+
+    function reset1v1Form() {
+        document.getElementById('duel-player-1-input').value = '';
+        document.getElementById('duel-player-2-input').value = '';
+        document.getElementById('duel-score-1-input').value = '';
+        document.getElementById('duel-score-2-input').value = '';
+        document.getElementById('duel-max-points-input').value = '11';
+        hideDuelError();
+        hideDuelStatus();
+    }
+
+    async function submit1v1Match() {
+        const player1 = document.getElementById('duel-player-1-input').value.trim();
+        const player2 = document.getElementById('duel-player-2-input').value.trim();
+        const score1 = parseInt(document.getElementById('duel-score-1-input').value, 10);
+        const score2 = parseInt(document.getElementById('duel-score-2-input').value, 10);
+        const maxPoints = parseInt(document.getElementById('duel-max-points-input').value, 10);
+
+        hideDuelError();
+        hideDuelStatus();
+
+        if (!player1 || !player2) {
+            showDuelError('Both player names are required.');
+            return;
+        }
+
+        if (player1.toLowerCase() === player2.toLowerCase()) {
+            showDuelError('Players must have unique names.');
+            return;
+        }
+
+        if (!Number.isInteger(score1) || !Number.isInteger(score2)) {
+            showDuelError('Please enter valid integer scores.');
+            return;
+        }
+
+        if (!Number.isInteger(maxPoints) || maxPoints < 1) {
+            showDuelError('Valid positive number required for max points.');
+            return;
+        }
+
+        const clampedScore1 = Math.min(Math.max(score1, 0), maxPoints);
+        const clampedScore2 = Math.min(Math.max(score2, 0), maxPoints);
+        const winner = clampedScore1 === clampedScore2 ? null : (clampedScore1 > clampedScore2 ? player1 : player2);
+        const resultSummary = winner ? `${winner} wins ${clampedScore1}-${clampedScore2}` : `Tie ${clampedScore1}-${clampedScore2}`;
+
+        const record = {
+            id: `duel_${Date.now()}`,
+            player1,
+            player2,
+            score1: clampedScore1,
+            score2: clampedScore2,
+            winner,
+            maxPoints,
+            createdAt: new Date().toISOString(),
+            resultSummary
+        };
+
+        await persistDuelRecord(record);
+        showDuelStatus(`Saved ${resultSummary}.`);
+        reset1v1Form();
+        document.getElementById('duel-player-1-input').value = player1;
+        document.getElementById('duel-player-2-input').value = player2;
+    }
 
     window.addEventListener('DOMContentLoaded', async () => {
         await initializedStorageIndex();
         await loadActiveSession();
+        await loadDuelHistory();
         refreshDashboardUI();
     });
 
@@ -706,10 +1047,12 @@
             id: "",
             name: "",
             isTournamentActive: false,
+            mode: 'tournament',
             players: [],
             groupMatches: [],
             playoffBracketType: 'SF',
             playoffMatches: {},
+            duelResultSaved: false,
             rules: {
                 maxPointsPerMatch: 11,
                 allowTies: false
@@ -742,15 +1085,15 @@
 
         if(activeTournament.isTournamentActive) {
             lockRosterUI(true);
-            ['tab-matches', 'tab-playoffs', 'tab-standings'].forEach(id => document.getElementById(id).disabled = false);
-            
+            setActiveModeUI();
+
             reconstructGroupStageDOM();
             reconstructPlayoffStageDOM();
             updateUI();
             switchTab('matches', 1);
         } else {
             lockRosterUI(false);
-            ['tab-matches', 'tab-playoffs', 'tab-standings'].forEach(id => document.getElementById(id).disabled = true);
+            setActiveModeUI();
             document.getElementById('champion-announcement-zone').innerHTML = '';
             document.getElementById('matches-to-playoffs-action').style.display = 'none';
             document.getElementById('playoffs-to-leaderboard-action').style.display = 'none';
@@ -762,8 +1105,10 @@
     function reconstructGroupStageDOM() {
         const container = document.getElementById('matches-container');
         const buffer = [];
+        const heading = activeTournament.mode === 'duel' ? '1v1 • Head to Head' : `GROUP STAGE • ${1}`;
         activeTournament.groupMatches.forEach((m, idx) => {
-            buffer.push(generateStepperHTML(m.p1, m.p2, `GROUP STAGE • ${idx + 1}`, 'group', idx));
+            const label = activeTournament.mode === 'duel' ? heading : `GROUP STAGE • ${idx + 1}`;
+            buffer.push(generateStepperHTML(m.p1, m.p2, label, 'group', idx));
         });
         container.innerHTML = buffer.join('');
 
@@ -780,6 +1125,10 @@
     function reconstructPlayoffStageDOM() {
         const grid = document.getElementById('dynamic-bracket-grid');
         grid.innerHTML = '';
+
+        if (activeTournament.mode === 'duel') {
+            return;
+        }
         
         if (activeTournament.playoffBracketType === 'QF') {
             grid.innerHTML += `<div class="playoff-tier"><div class="playoff-tier-title">Quarterfinals</div>
@@ -910,8 +1259,8 @@
     async function startTournament() {
         const errorAlert = document.getElementById('setup-error-alert');
         errorAlert.style.display = 'none';
-        errorAlert.innerText = ''; 
-        
+        errorAlert.innerText = '';
+
         const rawPoints = cleanInputDigits(document.getElementById('max-points-input').value);
         const parsedPoints = parseInt(rawPoints, 10);
         if(isNaN(parsedPoints) || parsedPoints <= 0) {
@@ -919,49 +1268,55 @@
             errorAlert.style.display = 'block';
             return;
         }
-        
+
         activeTournament.rules.maxPointsPerMatch = parsedPoints;
-        activeTournament.players = [];
-        
-        let nameSet = new Set();
-        let errorMessage = null;
-
-        const playerInputs = document.querySelectorAll('.player-name-input');
-        
-        for (let i = 0; i < playerInputs.length; i++) {
-            const name = playerInputs[i].value.trim();
-            
-            if (!name) { errorMessage = "Player names cannot be empty."; break; }
-            // Expanded alignment regex rules engine mapping to accept underscores smoothly
-            if (!/^[a-zA-Z0-9\s.\-_']+$/.test(name)) { errorMessage = "Names contain invalid special characters."; break; }
-            if (name.length > 24) { errorMessage = "Names must not exceed 24 characters."; break; }
-            if (nameSet.has(name.toLowerCase())) { errorMessage = "Athlete names must be unique."; break; }
-            
-            nameSet.add(name.toLowerCase());
-            activeTournament.players.push(name);
-        }
-
-        if (errorMessage) {
-            errorAlert.innerText = errorMessage;
+        const validation = collectRosterEntries();
+        if (validation.error) {
+            errorAlert.innerText = validation.error;
             errorAlert.style.display = 'block';
             return;
         }
 
-        if(activeTournament.players.length < 3) {
+        activeTournament.players = validation.names;
+        const playerCount = activeTournament.players.length;
+
+        if (playerCount === 2) {
+            activeTournament.mode = 'duel';
+            activeTournament.groupMatches = [{ p1: activeTournament.players[0], p2: activeTournament.players[1], s1: '', s2: '' }];
+            activeTournament.playoffMatches = {};
+            activeTournament.playoffBracketType = 'F';
+            activeTournament.duelResultSaved = false;
+            activeTournament.id = 't_' + Date.now();
+            activeTournament.name = `1v1 ${activeTournament.players[0]} vs ${activeTournament.players[1]}`;
+            activeTournament.isTournamentActive = true;
+
+            lockRosterUI(true);
+            renderGroupStageStructure();
+            reconstructPlayoffStageDOM();
+            updateUI();
+            setActiveModeUI();
+            await saveCurrentStateToStorage();
+            switchTab('matches', 1);
+            return;
+        }
+
+        if (playerCount < 3) {
             errorAlert.innerText = "Minimum 3 players required.";
             errorAlert.style.display = 'block';
             return;
         }
 
+        activeTournament.mode = 'tournament';
         activeTournament.id = 't_' + Date.now();
         activeTournament.name = `Tournament ${new Date().toLocaleDateString()} (${activeTournament.players.length} Players)`;
         activeTournament.isTournamentActive = true;
+        activeTournament.duelResultSaved = false;
         
         lockRosterUI(true);
         generateRoundRobinMatches();
         initializeDynamicPlayoffStructure(activeTournament.players.length);
         
-        ['tab-matches', 'tab-playoffs', 'tab-standings'].forEach(id => document.getElementById(id).disabled = false);
+        setActiveModeUI();
         
         renderGroupStageStructure();
         renderPlayoffStructure();
@@ -1000,7 +1355,6 @@
         restoreUIFromActiveState();
         switchTab('setup', 0);
     }
-
     function lockRosterUI(locked) {
         document.querySelectorAll('.player-name-input, .btn-icon, #max-points-input, #add-player-row-btn').forEach(el => el.disabled = locked);
         document.getElementById('start-tournament-btn').style.display = locked ? 'none' : 'block';
@@ -1060,7 +1414,7 @@
     async function setScore(key, isPlayer1, val, type) {
         const matchObj = type === 'group' ? activeTournament.groupMatches[key] : activeTournament.playoffMatches[key];
         let newScore;
-
+        
         if (val === '' || val === null) {
             newScore = '';
         } else {
@@ -1072,15 +1426,36 @@
             if (newScore < 0) newScore = 0;
             if (newScore > activeTournament.rules.maxPointsPerMatch) newScore = activeTournament.rules.maxPointsPerMatch;
         }
-
+        
         if (isPlayer1) matchObj.s1 = newScore; else matchObj.s2 = newScore;
-
+        
         const card = document.getElementById(`${type}-card-${key}`);
         if(card) {
             card.querySelector(isPlayer1 ? '.s1-val' : '.s2-val').value = newScore;
             evaluateMatchState(matchObj, card);
             updateUI();
         }
+
+        if (activeTournament.mode === 'duel' && !activeTournament.duelResultSaved) {
+            const isComplete = matchObj.s1 !== '' && matchObj.s2 !== '' && matchObj.s1 !== matchObj.s2;
+            if (isComplete) {
+                const winner = matchObj.s1 > matchObj.s2 ? matchObj.p1 : matchObj.p2;
+                const duelRecord = {
+                    id: `duel_${Date.now()}`,
+                    player1: matchObj.p1,
+                    player2: matchObj.p2,
+                    score1: matchObj.s1,
+                    score2: matchObj.s2,
+                    winner,
+                    maxPoints: activeTournament.rules.maxPointsPerMatch,
+                    createdAt: new Date().toISOString(),
+                    resultSummary: `${winner} wins ${matchObj.s1}-${matchObj.s2}`
+                };
+                await persistDuelRecord(duelRecord);
+                activeTournament.duelResultSaved = true;
+            }
+        }
+
         await saveCurrentStateToStorage();
     }
 
@@ -1148,7 +1523,8 @@
         const buffer = [];
         activeTournament.groupMatches.forEach((m, idx) => {
             m.s1 = ''; m.s2 = ''; 
-            buffer.push(generateStepperHTML(m.p1, m.p2, `GROUP STAGE • ${idx + 1}`, 'group', idx));
+            const label = activeTournament.mode === 'duel' ? '1v1 • Head to Head' : `GROUP STAGE • ${idx + 1}`;
+            buffer.push(generateStepperHTML(m.p1, m.p2, label, 'group', idx));
         });
         container.innerHTML = buffer.join('');
     }
@@ -1178,6 +1554,28 @@
     }
 
     function calculateStandings() {
+        if (activeTournament.mode === 'duel' && activeTournament.groupMatches.length > 0) {
+            const match = activeTournament.groupMatches[0];
+            const stats = {
+                [match.p1]: { name: match.p1, w: 0, l: 0, diff: 0 },
+                [match.p2]: { name: match.p2, w: 0, l: 0, diff: 0 }
+            };
+
+            if (match.s1 !== '' && match.s2 !== '' && match.s1 !== match.s2) {
+                stats[match.p1].diff += (match.s1 - match.s2);
+                stats[match.p2].diff += (match.s2 - match.s1);
+                if (match.s1 > match.s2) {
+                    stats[match.p1].w++;
+                    stats[match.p2].l++;
+                } else {
+                    stats[match.p2].w++;
+                    stats[match.p1].l++;
+                }
+            }
+
+            return Object.values(stats).sort((a, b) => b.w - a.w || b.diff - a.diff);
+        }
+
         let stats = {};
         activeTournament.players.forEach(p => stats[p] = { name: p, w: 0, l: 0, diff: 0 });
 
@@ -1242,69 +1640,216 @@
     }
 
     async function shareResults() {
-        const shareBtn = document.querySelector('.btn-action.share-btn');
-        const originalText = shareBtn.innerHTML;
-        
-        shareBtn.innerHTML = '📸 Capturing...';
-        shareBtn.disabled = true;
+        const shareBtn = document.querySelector('.btn-action.share-btn, .btn-share');
+        if (shareBtn) {
+            shareBtn.dataset.originalText = shareBtn.innerHTML;
+            shareBtn.innerHTML = '📸 Preparing share...';
+            shareBtn.disabled = true;
+        }
+
+        const isDuel = activeTournament.mode === 'duel';
+        const title = isDuel ? '1v1 Win Share' : 'Tournament Results';
+        const fileName = isDuel ? `duel-win-${Date.now()}.png` : `tournament-results-${Date.now()}.png`;
+
+        let shareText = '';
+        if (isDuel) {
+            const match = activeTournament.groupMatches[0];
+            shareText = `🏸 1v1 Match Complete! ${match.p1} ${match.s1} - ${match.s2} ${match.p2}`;
+        } else {
+            const champName = calculateStandings()[0]?.name || 'TBD';
+            shareText = `🏆 Tournament Results are in! 👑 Champion: ${champName}`;
+        }
 
         try {
-            const targetElement = document.getElementById('view-standings');
-            shareBtn.style.display = 'none';
+            // 1. Construct standalone pristine capture container to prevent html2canvas artifacts
+            const captureContainer = document.createElement('div');
+            captureContainer.style.position = 'fixed';
+            captureContainer.style.left = '-9999px';
+            captureContainer.style.top = '0';
+            captureContainer.style.width = '720px';
+            captureContainer.style.padding = '48px';
+            captureContainer.style.background = 'linear-gradient(135deg, #ffd84d, #ff9d3d)'; // Fixes root cause #1
+            captureContainer.style.borderRadius = '24px';
+            captureContainer.style.zIndex = '-1';
+            captureContainer.style.display = 'flex';
+            captureContainer.style.flexDirection = 'column';
+            captureContainer.style.gap = '32px';
+            captureContainer.style.boxSizing = 'border-box';
+            captureContainer.style.fontFamily = "'DM Sans', sans-serif";
 
-            const canvas = await html2canvas(targetElement, {
+            // 2. Clone and groom the Banner (Name & Badge)
+            const originalBanner = document.querySelector('.champion-reveal-banner');
+            if (originalBanner) {
+                const bannerClone = originalBanner.cloneNode(true);
+                
+                // Strip buttons so they aren't in the shared image
+                const buttons = bannerClone.querySelectorAll('button, .action-container, .btn');
+                buttons.forEach(b => b.remove());
+
+                // Restyle banner specifically for the standalone wrapper
+                bannerClone.style.background = 'transparent';
+                bannerClone.style.border = 'none';
+                bannerClone.style.padding = '0';
+                bannerClone.style.margin = '0';
+                bannerClone.style.animation = 'none';
+
+                // Enforce badge text contextually
+                const badge = bannerClone.querySelector('.champion-badge');
+                if (badge) {
+                    badge.textContent = isDuel ? '1V1 WINNER' : 'GRAND CHAMPION';
+                    badge.style.fontSize = '1.1rem';
+                    badge.style.padding = '10px 20px';
+                }
+
+                // Enforce strong typography on the winner's name
+                const nameText = bannerClone.querySelector('.champion-name-text');
+                if (nameText) {
+                    nameText.style.fontFamily = "'Space Grotesk', sans-serif";
+                    nameText.style.fontSize = '4.5rem';
+                    nameText.style.fontWeight = '700';
+                    nameText.style.color = '#111111'; // Void black
+                }
+
+                captureContainer.appendChild(bannerClone);
+            }
+
+            // 3. Clone and embed the Leaderboard
+            const originalTable = document.querySelector('.rankings-table');
+            if (originalTable) {
+                const tableContainer = document.createElement('div');
+                tableContainer.style.background = '#111111'; // High contrast backing for the table
+                tableContainer.style.borderRadius = '16px';
+                tableContainer.style.padding = '16px';
+                tableContainer.style.border = '4px solid #111111';
+                tableContainer.style.boxShadow = '0 12px 24px rgba(0,0,0,0.2)';
+                
+                const tableClone = originalTable.cloneNode(true);
+                tableClone.style.margin = '0';
+                tableClone.style.border = 'none';
+                tableClone.style.width = '100%';
+                
+                tableContainer.appendChild(tableClone);
+                captureContainer.appendChild(tableContainer);
+            }
+
+            document.body.appendChild(captureContainer);
+
+            // 4. Capture Canvas (removing previous backgroundColor: '#111111' rule prevents the washed-out black tint)
+            const canvas = await html2canvas(captureContainer, {
                 scale: 2,
-                backgroundColor: '#111111', 
-                useCORS: true 
+                backgroundColor: null, // Critical fix for background bleed
+                useCORS: true,
+                logging: false
             });
 
-            shareBtn.style.display = 'inline-flex';
+            document.body.removeChild(captureContainer);
 
             canvas.toBlob(async (blob) => {
-                const file = new File([blob], "tournament-results.png", { type: "image/png" });
-                const standings = calculateStandings();
-                const shareText = `🏆 Tournament Results are in! 👑 Champion: ${standings[0].name}`;
+                if (!blob) throw new Error('No image captured.');
 
-                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                const file = new File([blob], fileName, { type: 'image/png' });
+                const sharePayload = {
+                    files: [file],
+                    title,
+                    text: shareText
+                };
+
+                if (navigator.canShare && navigator.canShare(sharePayload)) {
                     try {
-                        await navigator.share({
-                            files: [file],
-                            title: 'Tournament Results',
-                            text: shareText
-                        });
+                        await navigator.share(sharePayload);
                     } catch (shareErr) {
-                        print('User canceled share or error:', shareErr);
+                        if (shareErr && shareErr.name !== 'AbortError') {
+                            console.warn('Share canceled or unsupported.', shareErr);
+                        }
                     }
                 } else {
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `Tournament_Results_${new Date().getTime()}.png`;
+                    a.download = fileName;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    
-                    alert("📸 Image saved to your device!");
+                    alert('📸 Win card saved to your device!');
                 }
-                
-                shareBtn.innerHTML = originalText;
-                shareBtn.disabled = false;
-                
+
+                if (shareBtn) {
+                    shareBtn.innerHTML = shareBtn.dataset.originalText;
+                    shareBtn.disabled = false;
+                }
             }, 'image/png');
 
         } catch (err) {
-            alert("⚠️ Failed to capture the results. Please try again.");
-            shareBtn.style.display = 'inline-flex';
-            shareBtn.innerHTML = originalText;
-            shareBtn.disabled = false;
+            console.error(err);
+            alert('⚠️ Failed to capture the win card. Please try again.');
+            if (shareBtn) {
+                shareBtn.innerHTML = shareBtn.dataset.originalText;
+                shareBtn.disabled = false;
+            }
         }
     }
 
     function updateUI() {
         const standings = calculateStandings();
         const tbody = document.getElementById('standings-body');
-        
+
+        if (activeTournament.mode === 'duel') {
+            const match = activeTournament.groupMatches[0];
+            const finished = match && match.s1 !== '' && match.s2 !== '' && match.s1 !== match.s2;
+            const winner = finished ? (match.s1 > match.s2 ? match.p1 : match.p2) : null;
+            const matchesContainer = document.getElementById('matches-container');
+            const bannerHtml = finished ? `
+                <div class="champion-reveal-banner" style="margin-bottom: 20px;">
+                    <div class="champion-badge">1V1 WINNER</div>
+                    <div class="champion-name-text">${winner}</div>
+                    <div style="margin-top: 20px; font-family: var(--font-body); font-weight: 700; color: var(--void-black); font-size: 1.05rem;">${match.p1} ${match.s1} - ${match.s2} ${match.p2}</div>
+                    <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center;">
+                        <button class="btn btn-share share-btn" onclick="shareResults()" style="font-size: 1rem; padding: 14px 24px; width: auto; max-width: 280px;">
+                            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                            Share Win
+                        </button>
+                        <button class="btn btn-primary next-tournament-trigger-btn" onclick="playNextTournament()" style="font-size: 1rem; padding: 14px 24px; border: 2px solid var(--void-black); width: auto; max-width: 280px; box-shadow: 0 4px 0 var(--void-black);">
+                            Play Next Match
+                        </button>
+                    </div>
+                </div>` : '';
+
+            tbody.innerHTML = standings.map((p, i) => `
+                <tr>
+                    <td style="padding-left: 20px;"><div class="rank-number">${i + 1}</div></td>
+                    <td>${p.name}</td>
+                    <td style="text-align: center;">${p.w}</td>
+                    <td style="text-align: center; color: var(--court-grey);">${p.l}</td>
+                    <td style="text-align: center; font-weight:700; padding-right: 20px; color: ${p.diff > 0 ? 'var(--electric-yellow)' : (p.diff < 0 ? 'var(--action-orange)' : 'inherit')};">${p.diff > 0 ? '+' : ''}${p.diff}</td>
+                </tr>`).join('');
+
+            document.getElementById('matches-to-playoffs-action').style.display = 'none';
+            document.getElementById('playoffs-to-leaderboard-action').style.display = 'none';
+            document.getElementById('bracket-lock').style.display = 'block';
+            document.getElementById('bracket-container').style.display = 'none';
+
+            if (finished) {
+                document.getElementById('champion-announcement-zone').innerHTML = '';
+                matchesContainer.innerHTML = `${bannerHtml}${generateStepperHTML(match.p1, match.p2, '1v1 • Head to Head', 'group', 0)}`;
+                const card = document.getElementById('group-card-0');
+                if (card) {
+                    card.querySelector('.s1-val').value = match.s1;
+                    card.querySelector('.s2-val').value = match.s2;
+                    evaluateMatchState(match, card);
+                }
+            } else {
+                document.getElementById('champion-announcement-zone').innerHTML = '';
+                matchesContainer.innerHTML = generateStepperHTML(match.p1, match.p2, '1v1 • Head to Head', 'group', 0);
+                const card = document.getElementById('group-card-0');
+                if (card) {
+                    card.querySelector('.s1-val').value = match.s1;
+                    card.querySelector('.s2-val').value = match.s2;
+                    evaluateMatchState(match, card);
+                }
+            }
+            return;
+        }
+
         tbody.innerHTML = standings.map((p, i) => `
             <tr>
                 <td style="padding-left: 20px;"><div class="rank-number">${i + 1}</div></td>
@@ -1372,7 +1917,7 @@
             
             document.getElementById('champion-announcement-zone').innerHTML = `
                 <div class="champion-reveal-banner">
-                    <div class="champion-badge">Grand Champion</div>
+                    <div class="champion-badge">GRAND CHAMPION</div>
                     <div class="champion-name-text">${champ}</div>
                     <div style="margin-top: 32px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center;">
                         <button class="btn btn-action share-btn" onclick="shareResults()" style="font-size: 1.1rem; padding: 14px 24px; border: 2px solid var(--void-black); width: auto; max-width: 280px;">

@@ -1,0 +1,42 @@
+{
+  "id": "t_1710000000003",
+  "name": "BWF World Tour Finals Simulation",
+  "isTournamentActive": true,
+  "mode": "tournament",
+  "players": [
+    "Viktor Axelsen",
+    "Shi Yuqi",
+    "Anders Antonsen",
+    "Lee Zii Jia",
+    "Chou Tien-Chen",
+    "Kunlavut Vitidsarn",
+    "Kodai Naraoka",
+    "Prannoy H. S."
+  ],
+  "groupMatches": [
+    { "p1": "Viktor Axelsen", "p2": "Prannoy H. S.", "s1": 21, "s2": 12 },
+    { "p1": "Shi Yuqi", "p2": "Kodai Naraoka", "s1": 21, "s2": 15 },
+    { "p1": "Anders Antonsen", "p2": "Kunlavut Vitidsarn", "s1": 21, "s2": 19 },
+    { "p1": "Lee Zii Jia", "p2": "Chou Tien-Chen", "s1": 21, "s2": 17 },
+    { "p1": "Viktor Axelsen", "p2": "Kodai Naraoka", "s1": 21, "s2": 14 },
+    { "p1": "Shi Yuqi", "p2": "Prannoy H. S.", "s1": 21, "s2": 18 },
+    { "p1": "Anders Antonsen", "p2": "Chou Tien-Chen", "s1": 21, "s2": 16 },
+    { "p1": "Lee Zii Jia", "p2": "Kunlavut Vitidsarn", "s1": 18, "s2": 21 }
+  ],
+  "playoffBracketType": "QF",
+  "playoffMatches": {
+    "qf1": { "p1": "Viktor Axelsen", "p2": "Prannoy H. S.", "s1": 21, "s2": 10, "label": "QF 1 (1v8)" },
+    "qf2": { "p1": "Lee Zii Jia", "p2": "Chou Tien-Chen", "s1": 21, "s2": 19, "label": "QF 2 (4v5)" },
+    "qf3": { "p1": "Anders Antonsen", "p2": "Kunlavut Vitidsarn", "s1": 21, "s2": 18, "label": "QF 3 (3v6)" },
+    "qf4": { "p1": "Shi Yuqi", "p2": "Kodai Naraoka", "s1": 21, "s2": 13, "label": "QF 4 (2v7)" },
+    "sf1": { "p1": "Viktor Axelsen", "p2": "Lee Zii Jia", "s1": 21, "s2": 16, "label": "SF 1" },
+    "sf2": { "p1": "Anders Antonsen", "p2": "Shi Yuqi", "s1": 19, "s2": 21, "label": "SF 2" },
+    "final": { "p1": "Viktor Axelsen", "p2": "Shi Yuqi", "s1": 21, "s2": 17, "label": "Championship" },
+    "third": { "p1": "Lee Zii Jia", "p2": "Anders Antonsen", "s1": 21, "s2": 19, "label": "Bronze Final" }
+  },
+  "duelResultSaved": false,
+  "rules": {
+    "maxPointsPerMatch": 21,
+    "allowTies": false
+  }
+}
