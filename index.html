@@ -25,14 +25,49 @@
             --font-heading: 'Space Grotesk', sans-serif;
             --font-body: 'DM Sans', sans-serif;
             
-            --focus-ring: 0 0 0 2px var(--electric-yellow);
-            --transition-smooth: all 0.2s ease-out;
+            --focus-ring: 0 0 0 2px var(--pure-white), 0 0 0 4px var(--void-black);
+            --focus-ring-dark: 0 0 0 2px var(--void-black), 0 0 0 4px var(--electric-yellow);
+            --transition-smooth: transform 0.2s ease-out, opacity 0.2s ease-out, background-color 0.2s ease-out, border-color 0.2s ease-out, color 0.2s ease-out;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+            }
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+        }
+
+        button:focus-visible,
+        input:focus-visible,
+        a:focus-visible,
+        label.file-import-label:focus-within {
+            outline: none;
+            box-shadow: var(--focus-ring);
+            position: relative;
+            z-index: 4;
+        }
+
+        /* Elements that render on the dark page background need the inverted ring for contrast */
+        .settings-btn:focus-visible,
+        .tab-btn:focus-visible {
+            box-shadow: var(--focus-ring-dark);
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px; height: 1px;
+            padding: 0; margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
         body {
@@ -153,6 +188,12 @@
 
         .player-input-row { display: flex; gap: 12px; margin-bottom: 16px; min-width: 0; }
 
+        .field-label {
+            display: block; font-family: var(--font-body); font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em; color: var(--void-black); opacity: 0.6;
+            margin-bottom: 6px;
+        }
+
         .roster-status-alert {
             background: var(--pure-white); border: 2px solid var(--void-black);
             border-left: 8px solid var(--electric-yellow);
@@ -176,7 +217,12 @@
         }
 
         input[type="text"]:focus, input[type="number"]:focus {
-            outline: none; border-color: var(--electric-yellow);
+            outline: none; border-color: var(--void-black);
+        }
+
+        input.input-error {
+            border-color: var(--action-orange);
+            background-color: #fff4f1;
         }
 
         input[type="number"].score-display {
@@ -412,7 +458,7 @@
         .score-control { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         
         .stepper-btn {
-            width: 36px; height: 36px; border-radius: 8px; border: 2px solid var(--void-black);
+            width: 44px; height: 44px; border-radius: 8px; border: 2px solid var(--void-black);
             background: var(--pure-white); color: var(--void-black); 
             display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.1s;
         }
@@ -534,7 +580,7 @@
             .player-avatar { width: 40px; height: 40px; min-width: 40px; font-size: 0.9rem; }
             .player-name { font-size: 1rem; }
             
-            .stepper-btn { width: 32px; height: 32px; }
+            .stepper-btn { width: 44px; height: 44px; }
             input[type="number"].score-display { width: 44px; height: 44px; font-size: 1.4rem; padding: 0; flex: 0 0 auto; }
             
             .rankings-table th, .rankings-table td { padding: 12px 10px; font-size: 0.85rem; }
@@ -567,8 +613,8 @@
 <header>
     <h1>Tournament Manager</h1>
     <p>1 Court • Round Robin • Playoffs</p>
-    <button class="settings-btn" onclick="toggleSettingsModal(true)">
-        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    <button class="settings-btn" aria-label="Open settings" onclick="toggleSettingsModal(true)">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
     </button>
 </header>
 
@@ -577,9 +623,9 @@
         <div class="tab-slider" id="tab-slider"></div>
         <div class="tabs-container">
             <button class="tab-btn active" id="tab-setup" onclick="switchTab('setup', 0)">Roster</button>
-            <button class="tab-btn" id="tab-matches" onclick="switchTab('matches', 1)" disabled>Matches</button>
-            <button class="tab-btn" id="tab-playoffs" onclick="switchTab('playoffs', 2)" disabled>Playoffs</button>
-            <button class="tab-btn" id="tab-standings" onclick="switchTab('standings', 3)" disabled>Standings</button>
+            <button class="tab-btn" id="tab-matches" onclick="switchTab('matches', 1)" disabled title="Start a tournament to unlock Matches">Matches</button>
+            <button class="tab-btn" id="tab-playoffs" onclick="switchTab('playoffs', 2)" disabled title="Complete the group stage to unlock Playoffs">Playoffs</button>
+            <button class="tab-btn" id="tab-standings" onclick="switchTab('standings', 3)" disabled title="Finish the tournament to unlock Standings">Standings</button>
         </div>
     </div>
 
@@ -591,11 +637,12 @@
                 Roster locked. Tournament is active. Use the Settings menu to reset or manage storage.
             </div>
             
-            <div id="player-inputs-container">
+            <span class="field-label" id="athlete-names-label">Athlete Names</span>
+            <div id="player-inputs-container" role="group" aria-labelledby="athlete-names-label">
                 <div class="player-input-row">
-                    <input type="text" class="player-name-input" placeholder="Player 1" maxlength="24">
-                    <button class="btn btn-icon" onclick="removePlayerRow(this)">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    <input type="text" class="player-name-input" aria-label="Athlete name" placeholder="Player 1" maxlength="24">
+                    <button class="btn btn-icon" aria-label="Remove player" onclick="removePlayerRow(this)">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
                     </button>
                 </div>
             </div>
@@ -603,17 +650,17 @@
             
             <div class="config-box">
                 <div>
-                    <h3>Max Points Per Match</h3>
+                    <h3 id="max-points-heading">Max Points Per Match</h3>
                     <p>Upper score limit for input validation.</p>
                 </div>
-                <input type="number" id="max-points-input" class="config-input" value="10" min="1" max="999">
+                <input type="number" id="max-points-input" class="config-input" value="10" min="1" max="999" aria-labelledby="max-points-heading" title="Locked once a tournament is active">
             </div>
 
             <div class="roster-status-alert" style="margin-top: 16px; border-left-color: var(--electric-yellow);">
                 <strong>Auto mode:</strong> Enter exactly 2 players to launch a 1v1 duel. Enter 3 or more players to launch a tournament.
             </div>
 
-            <div id="setup-error-alert" class="form-error-alert"></div>
+            <div id="setup-error-alert" class="form-error-alert" role="alert" aria-live="assertive"></div>
             <button id="start-tournament-btn" class="btn btn-action" style="margin-top: 8px;" onclick="startTournament()">Start Tournament</button>
         </div>
     </section>
@@ -677,7 +724,7 @@
         <h3>Tournament Controls</h3>
         <p>Configure local state preferences and cloudless storage files.</p>
         
-        <button id="reset-tournament-btn" class="btn btn-secondary" style="width: 100%; color: var(--action-orange); border-color: var(--action-orange); display: none;" onclick="resetTournament()">Reset Current Tournament</button>
+        <button id="reset-tournament-btn" class="btn btn-secondary" style="width: 100%; color: var(--void-black); border-color: var(--action-orange); border-width: 3px; display: none;" onclick="resetTournament()">Reset Current Tournament</button>
         
         <hr class="settings-divider">
         
@@ -760,20 +807,54 @@
     function collectRosterEntries() {
         const playerInputs = Array.from(document.querySelectorAll('.player-name-input'));
         const names = [];
-        const nameSet = new Set();
+        const seenNames = new Map(); // lowercase name -> the input that first used it
+        const errorMessages = [];
 
-        for (const input of playerInputs) {
+        playerInputs.forEach(input => {
+            input.classList.remove('input-error');
+            input.removeAttribute('aria-invalid');
+        });
+
+        playerInputs.forEach(input => {
             const name = input.value.trim();
-            if (!name) return { error: 'Player names cannot be empty.' };
-            if (!/^[a-zA-Z0-9\s.\-_']+$/.test(name)) return { error: 'Names contain invalid special characters.' };
-            if (name.length > 24) return { error: 'Names must not exceed 24 characters.' };
-            if (nameSet.has(name.toLowerCase())) return { error: 'Athlete names must be unique.' };
-            nameSet.add(name.toLowerCase());
-            names.push(name);
+            let fieldError = null;
+
+            if (!name) {
+                fieldError = 'Player names cannot be empty.';
+            } else if (!/^[a-zA-Z0-9\s.\-_']+$/.test(name)) {
+                fieldError = 'Names contain invalid special characters.';
+            } else if (name.length > 24) {
+                fieldError = 'Names must not exceed 24 characters.';
+            } else if (seenNames.has(name.toLowerCase())) {
+                fieldError = 'Athlete names must be unique.';
+                seenNames.get(name.toLowerCase()).classList.add('input-error');
+                seenNames.get(name.toLowerCase()).setAttribute('aria-invalid', 'true');
+            }
+
+            if (fieldError) {
+                input.classList.add('input-error');
+                input.setAttribute('aria-invalid', 'true');
+                errorMessages.push(fieldError);
+            } else {
+                seenNames.set(name.toLowerCase(), input);
+                names.push(name);
+            }
+        });
+
+        if (errorMessages.length) {
+            return { error: [...new Set(errorMessages)].join(' ') };
         }
 
         return { names };
     }
+
+    // Clear a field's error state as soon as the user edits it, rather than only on the next submit attempt
+    document.addEventListener('input', (e) => {
+        if (e.target.classList && e.target.classList.contains('player-name-input') && e.target.classList.contains('input-error')) {
+            e.target.classList.remove('input-error');
+            e.target.removeAttribute('aria-invalid');
+        }
+    });
 
     function setActiveModeUI() {
         const isActive = activeTournament.isTournamentActive;
@@ -1069,16 +1150,16 @@
         if (activeTournament.players.length === 0) {
             container.innerHTML = `
                 <div class="player-input-row">
-                    <input type="text" class="player-name-input" placeholder="Player 1" maxlength="24">
-                    <button class="btn btn-icon" onclick="removePlayerRow(this)">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    <input type="text" class="player-name-input" aria-label="Athlete name" placeholder="Player 1" maxlength="24">
+                    <button class="btn btn-icon" aria-label="Remove player" onclick="removePlayerRow(this)">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
                     </button>
                 </div>`;
         } else {
             activeTournament.players.forEach((p, idx) => {
                 const div = document.createElement('div');
                 div.className = 'player-input-row';
-                div.innerHTML = `<input type="text" class="player-name-input" value="${p}" placeholder="Player ${idx+1}" maxlength="24"><button class="btn btn-icon" onclick="removePlayerRow(this)"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
+                div.innerHTML = `<input type="text" class="player-name-input" aria-label="Athlete name" value="${p}" placeholder="Player ${idx+1}" maxlength="24"><button class="btn btn-icon" aria-label="Remove player" onclick="removePlayerRow(this)"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
                 container.appendChild(div);
             });
         }
@@ -1243,7 +1324,7 @@
         const count = container.querySelectorAll('.player-input-row').length + 1;
         const div = document.createElement('div');
         div.className = 'player-input-row';
-        div.innerHTML = `<input type="text" class="player-name-input" placeholder="Player ${count}" maxlength="24"><button class="btn btn-icon" onclick="removePlayerRow(this)"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
+        div.innerHTML = `<input type="text" class="player-name-input" aria-label="Athlete name" placeholder="Player ${count}" maxlength="24"><button class="btn btn-icon" aria-label="Remove player" onclick="removePlayerRow(this)"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
         container.appendChild(div);
     }
 
@@ -1258,14 +1339,19 @@
 
     async function startTournament() {
         const errorAlert = document.getElementById('setup-error-alert');
+        const maxPointsInput = document.getElementById('max-points-input');
         errorAlert.style.display = 'none';
         errorAlert.innerText = '';
+        maxPointsInput.classList.remove('input-error');
+        maxPointsInput.removeAttribute('aria-invalid');
 
-        const rawPoints = cleanInputDigits(document.getElementById('max-points-input').value);
+        const rawPoints = cleanInputDigits(maxPointsInput.value);
         const parsedPoints = parseInt(rawPoints, 10);
         if(isNaN(parsedPoints) || parsedPoints <= 0) {
             errorAlert.innerText = "Valid positive number required for Max Points.";
             errorAlert.style.display = 'block';
+            maxPointsInput.classList.add('input-error');
+            maxPointsInput.setAttribute('aria-invalid', 'true');
             return;
         }
 
@@ -1483,6 +1569,9 @@
         const minusIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>`;
         const plusIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`;
 
+        const p1Label = p1 || 'Player 1';
+        const p2Label = p2 || 'Player 2';
+
         return `
             <div id="${idPrefix}" class="match-card">
                 <div class="match-header"><span class="court-badge">${label}</span></div>
@@ -1493,9 +1582,9 @@
                             <span class="player-name p1-name" title="${p1}">${p1 || 'TBD Seed'}</span>
                         </div>
                         <div class="score-control">
-                            <button class="stepper-btn" onclick="adjustScore(${keyArg}, true, -1, '${type}')">${minusIcon}</button>
-                            <input type="number" class="score-display s1-val" value="" min="0" onchange="setScore(${keyArg}, true, this.value, '${type}')" onclick="this.select()">
-                            <button class="stepper-btn" onclick="adjustScore(${keyArg}, true, 1, '${type}')">${plusIcon}</button>
+                            <button class="stepper-btn" aria-label="Decrease ${p1Label} score" onclick="adjustScore(${keyArg}, true, -1, '${type}')">${minusIcon}</button>
+                            <input type="number" class="score-display s1-val" aria-label="${p1Label} score" value="" min="0" onchange="setScore(${keyArg}, true, this.value, '${type}')" onclick="this.select()">
+                            <button class="stepper-btn" aria-label="Increase ${p1Label} score" onclick="adjustScore(${keyArg}, true, 1, '${type}')">${plusIcon}</button>
                         </div>
                     </div>
                     <div class="player-match-row p2-wrap">
@@ -1504,13 +1593,13 @@
                             <span class="player-name p2-name" title="${p2}">${p2 || 'TBD Seed'}</span>
                         </div>
                         <div class="score-control">
-                            <button class="stepper-btn" onclick="adjustScore(${keyArg}, false, -1, '${type}')">${minusIcon}</button>
-                            <input type="number" class="score-display s2-val" value="" min="0" onchange="setScore(${keyArg}, false, this.value, '${type}')" onclick="this.select()">
-                            <button class="stepper-btn" onclick="adjustScore(${keyArg}, false, 1, '${type}')">${plusIcon}</button>
+                            <button class="stepper-btn" aria-label="Decrease ${p2Label} score" onclick="adjustScore(${keyArg}, false, -1, '${type}')">${minusIcon}</button>
+                            <input type="number" class="score-display s2-val" aria-label="${p2Label} score" value="" min="0" onchange="setScore(${keyArg}, false, this.value, '${type}')" onclick="this.select()">
+                            <button class="stepper-btn" aria-label="Increase ${p2Label} score" onclick="adjustScore(${keyArg}, false, 1, '${type}')">${plusIcon}</button>
                         </div>
                     </div>
                 </div>
-                <div class="tie-error-msg">
+                <div class="tie-error-msg" role="alert">
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     Ties are not permitted. Break the tie to proceed.
                 </div>
