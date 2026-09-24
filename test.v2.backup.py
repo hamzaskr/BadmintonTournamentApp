@@ -170,8 +170,8 @@ def test_playoff_bracket_finals_only(page: Page):
 
 # NOTE: For 4 to 7 players, the logic deliberately creates a Semi-Final bracket. 
 # Players ranking 5th-7th are dropped from Playoffs entirely. 
-def test_playoff_bracket_four_player_default(page: Page):
-    """V3 automatic format uses round-robin -> top two -> championship."""
+def test_playoff_bracket_semifinals(page: Page):
+    """Tests 4 players -> Semi-finals and Third Place match."""
     setup_roster(page, ["P1", "P2", "P3", "P4"])
     page.locator("#start-tournament-btn").click()
     
@@ -180,27 +180,29 @@ def test_playoff_bracket_four_player_default(page: Page):
         score_match(page, f"group-card-{i}", 11, i)
         
     page.locator("text=Proceed to Playoffs").click()
+    expect(page.locator("#playoff-card-sf1")).to_be_visible()
+    expect(page.locator("#playoff-card-sf2")).to_be_visible()
     expect(page.locator("#playoff-card-final")).to_be_visible()
-    expect(page.locator("#playoff-card-sf1")).not_to_be_visible()
-    expect(page.locator("#playoff-card-third")).not_to_be_visible()
+    expect(page.locator("#playoff-card-third")).to_be_visible()
+    
+    # Quarterfinals should NOT exist
     expect(page.locator("#playoff-card-qf1")).not_to_be_visible()
 
-def test_playoff_bracket_eight_player_swiss(page: Page):
-    """V3 automatic format uses deterministic Swiss qualification for 8 players."""
+def test_playoff_bracket_quarterfinals(page: Page):
+    """Tests 8 players -> Quarterfinals bracket generation."""
     players = [f"P{i}" for i in range(1, 9)]
     setup_roster(page, players)
     page.locator("#start-tournament-btn").click()
     
-    for round_number in range(3):
-        start = round_number * 4
-        for match_index in range(start, start + 4):
-            score_match(page, f"group-card-{match_index}", 11, 5)
-        page.locator("text=Proceed to Playoffs").click()
-
-    expect(page.locator("#playoff-card-sf1")).to_be_visible()
-    expect(page.locator("#playoff-card-sf2")).to_be_visible()
-    expect(page.locator("#playoff-card-final")).to_be_visible()
-    expect(page.locator("#playoff-card-qf1")).not_to_be_visible()
+    # 8 players -> 28 matches
+    for i in range(28):
+        score_match(page, f"group-card-{i}", 11, 5)
+        
+    page.locator("text=Proceed to Playoffs").click()
+    
+    # Quarterfinals should exist
+    expect(page.locator("#playoff-card-qf1")).to_be_visible()
+    expect(page.locator("#playoff-card-qf4")).to_be_visible()
 
 # ==========================================
 # 4. STANDINGS AND LIFECYCLE
@@ -292,135 +294,3 @@ def test_tournament_reset(page: Page):
     expect(page.locator("#view-setup")).to_have_class(re.compile(r"active"))
     expect(page.locator("#start-tournament-btn")).to_be_visible()
     expect(page.locator(".player-name-input").first).not_to_be_disabled()
-
-
-def test_v3_four_player_default_is_top_two_final(page: Page):
-    """Automatic four-player tournaments qualify the top two directly to a final."""
-    setup_roster(page, ["A", "B", "C", "D"])
-    page.locator("#start-tournament-btn").click()
-    for index in range(6):
-        score_match(page, f"group-card-{index}", 11, index)
-    page.locator("text=Proceed to Playoffs").click()
-
-    expect(page.locator("#playoff-card-final")).to_be_visible()
-    expect(page.locator("#playoff-card-sf1")).not_to_be_visible()
-    expect(page.locator("#playoff-card-final .p1-name")).to_have_text("A")
-    expect(page.locator("#playoff-card-final .p2-name")).to_have_text("B")
-
-
-def test_v3_traditional_upset_remains_valid(page: Page):
-    """The compatibility bracket permits a lower seed to win the championship."""
-    result = page.evaluate("""() => {
-        const state = normalizeTournamentState({
-            schemaVersion: 3,
-            isTournamentActive: true,
-            mode: 'tournament',
-            players: ['Hamza', 'Omer', 'Ahmed', 'Ebrahim'],
-            format: { strategy: 'round-robin', qualificationSize: 4, playoffSize: 4, playoffBracketType: 'SF' },
-            playoffBracketType: 'SF',
-            groupMatches: [
-                { p1: 'Hamza', p2: 'Omer', s1: 5, s2: 4 },
-                { p1: 'Hamza', p2: 'Ahmed', s1: 5, s2: 3 },
-                { p1: 'Hamza', p2: 'Ebrahim', s1: 5, s2: 2 },
-                { p1: 'Omer', p2: 'Ahmed', s1: 5, s2: 4 },
-                { p1: 'Omer', p2: 'Ebrahim', s1: 5, s2: 1 },
-                { p1: 'Ahmed', p2: 'Ebrahim', s1: 5, s2: 3 }
-            ],
-            playoffStageStarted: true,
-            seeds: [
-                { seed: 1, playerId: 'player_01', player: 'Hamza' },
-                { seed: 2, playerId: 'player_02', player: 'Omer' },
-                { seed: 3, playerId: 'player_03', player: 'Ahmed' },
-                { seed: 4, playerId: 'player_04', player: 'Ebrahim' }
-            ],
-            playoffMatches: {
-                sf1: { p1: 'player_01', p2: 'player_04', s1: 3, s2: 5, label: 'SF 1' },
-                sf2: { p1: 'player_02', p2: 'player_03', s1: 5, s2: 3, label: 'SF 2' },
-                final: { p1: 'player_04', p2: 'player_02', s1: 5, s2: 0, label: 'Championship' },
-                third: { p1: 'player_01', p2: 'player_03', s1: '', s2: '', label: 'Bronze Final' }
-            },
-            rules: { maxPointsPerMatch: 5, allowTies: false }
-        });
-        activeTournament = state;
-        return { champion: getTournamentChampion(), seedFour: activeTournament.seeds[3].playerId, report: validateTournamentIntegrity(activeTournament) };
-    }""")
-    assert result["seedFour"] == "player_04"
-    assert result["champion"] == "player_04"
-    assert result["report"]["valid"] is True
-
-
-def test_v3_group_scores_lock_after_seeding(page: Page):
-    """Historical group scores cannot silently change a frozen bracket."""
-    setup_roster(page, ["A", "B", "C", "D"])
-    page.locator("#start-tournament-btn").click()
-    for index in range(6):
-        score_match(page, f"group-card-{index}", 11, index)
-    page.locator("text=Proceed to Playoffs").click()
-    frozen = page.evaluate("({p1: activeTournament.playoffMatches.final.p1, p2: activeTournament.playoffMatches.final.p2, seeds: activeTournament.seeds})")
-    page.evaluate("setScore(0, true, 0, 'group')")
-    assert page.evaluate("({p1: activeTournament.playoffMatches.final.p1, p2: activeTournament.playoffMatches.final.p2, seeds: activeTournament.seeds})") == frozen
-
-
-def test_v3_lower_score_wins_result_model(page: Page):
-    result = page.evaluate("""() => {
-        const match = { p1: 'A', p2: 'B', s1: 2, s2: 7 };
-        return resolveMatchResult(match, { scoreDirection: 'lowerWins', allowTies: false });
-    }""")
-    assert result["winner"] == "A"
-    assert result["loser"] == "B"
-
-
-def test_v3_deterministic_swiss_schedule(page: Page):
-    result = page.evaluate("""() => {
-        const makeState = () => normalizeTournamentState({
-            id: 'seeded-test', players: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
-            groupMatches: [], playoffMatches: {}, rules: { maxPointsPerMatch: 11, allowTies: false },
-            randomization: { seed: 'same-seed', deterministic: true }
-        });
-        return [generateSwissSchedule(makeState(), 1), generateSwissSchedule(makeState(), 1)];
-    }""")
-    assert result[0] == result[1]
-
-
-def test_v3_malformed_bracket_is_rejected(page: Page):
-    result = page.evaluate("""() => {
-        try {
-            normalizeTournamentState({
-                schemaVersion: 3,
-                players: ['A', 'B', 'C', 'D'],
-                playoffBracketType: 'SF',
-                playoffStageStarted: true,
-                seeds: [
-                    { seed: 1, playerId: 'player_01' }, { seed: 2, playerId: 'player_02' },
-                    { seed: 3, playerId: 'player_03' }, { seed: 4, playerId: 'player_04' }
-                ],
-                groupMatches: [],
-                playoffMatches: {
-                    sf1: { p1: 'player_01', p2: 'player_02', s1: '', s2: '', label: 'SF 1' },
-                    sf2: { p1: 'player_01', p2: 'player_03', s1: '', s2: '', label: 'SF 2' },
-                    final: { p1: 'Winner SF1', p2: 'Winner SF2', s1: '', s2: '', label: 'Championship' }
-                },
-                rules: { maxPointsPerMatch: 11, allowTies: false }
-            });
-            return null;
-        } catch (error) {
-            return error.message;
-        }
-    }""")
-    assert "simultaneous" in result
-
-
-def test_v3_legacy_fixture_imports_preserve_results(page: Page):
-    for filename in ["4_player_legends_semifinals.json", "8_player_world_tour_final.json"]:
-        fixture = json.loads(Path(filename).read_text())
-        result = page.evaluate("""state => {
-            const normalized = normalizeTournamentState(state);
-            return {
-                valid: validateTournamentIntegrity(normalized).valid,
-                bracketType: normalized.playoffBracketType,
-                finalScore: normalized.playoffMatches.final ? [normalized.playoffMatches.final.s1, normalized.playoffMatches.final.s2] : null,
-                champion: getTournamentChampionFromState(normalized),
-            };
-        }""", fixture)
-        assert result["valid"] is True
-        assert result["finalScore"] is not None

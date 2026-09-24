@@ -474,7 +474,7 @@
 
         input[type=number].score-display::-webkit-inner-spin-button, 
         input[type=number].score-display::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type=number].score-display { -moz-appearance: textfield; appearance: textfield; }
+        input[type=number].score-display { -moz-appearance: textfield; }
 
         .rankings-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 8px; background: var(--void-black); border-radius: 12px; border: 2px solid var(--court-grey); overflow: hidden; }
         .rankings-table th { padding: 16px 20px; text-align: left; font-size: 0.75rem; font-family: var(--font-body); text-transform: uppercase; color: var(--pure-white); font-weight: 700; border-bottom: 2px solid var(--court-grey); background: var(--void-black); }
@@ -659,7 +659,6 @@
             <div class="roster-status-alert" style="margin-top: 16px; border-left-color: var(--electric-yellow);">
                 <strong>Auto mode:</strong> Enter exactly 2 players to launch a 1v1 duel. Enter 3 or more players to launch a tournament.
             </div>
-            <div id="format-preview" class="roster-status-alert" style="margin-top: 16px; border-left-color: var(--action-orange); display: none;"></div>
 
             <div id="setup-error-alert" class="form-error-alert" role="alert" aria-live="assertive"></div>
             <button id="start-tournament-btn" class="btn btn-action" style="margin-top: 8px;" onclick="startTournament()">Start Tournament</button>
@@ -687,7 +686,6 @@
         </div>
         
         <div id="bracket-container" style="display: none;">
-            <div id="seed-lock-status" class="roster-status-alert" style="margin-bottom: 20px; border-left-color: var(--electric-yellow);">Seeds are based on finalized group-stage results. The playoff bracket is locked.</div>
             <div class="bracket-grid" id="dynamic-bracket-grid"></div>
             
             <div id="playoffs-to-leaderboard-action" class="action-container" style="display: none;">
@@ -701,7 +699,7 @@
     <section id="view-standings" class="view-section">
         <div id="champion-announcement-zone"></div>
         <div style="background: transparent; padding: 0;">
-            <h2 class="section-title" style="color: var(--pure-white); border-bottom: 2px solid var(--court-grey); padding-bottom: 12px; margin-bottom: 16px;">Group Stage Standings</h2>
+            <h2 class="section-title" style="color: var(--pure-white); border-bottom: 2px solid var(--court-grey); padding-bottom: 12px; margin-bottom: 16px;">Standings Table</h2>
             <div style="overflow-x: auto;">
                 <table class="rankings-table">
                     <thead>
@@ -751,26 +749,14 @@
 
 <script>
     let activeTournament = {
-        schemaVersion: 3,
         id: "",
         name: "",
         isTournamentActive: false,
         mode: 'tournament',
         players: [],
-        playerRecords: [],
         groupMatches: [],
         playoffBracketType: 'SF',
         playoffMatches: {},
-        format: selectAutomaticFormat(0),
-        randomization: { seed: 'tournament-manager', deterministic: true },
-        stage: 'setup',
-        standings: [],
-        seeds: [],
-        playoffSeeds: [],
-        playoffStageStarted: false,
-        champion: null,
-        history: [],
-        metadata: {},
         duelResultSaved: false,
         rules: {
             maxPointsPerMatch: 11,
@@ -784,356 +770,6 @@
 
     const store = localforage.createInstance({ name: "TournamentManager_States" });
     const indexStore = localforage.createInstance({ name: "TournamentManager_Metadata" });
-
-    const TOURNAMENT_SCHEMA_VERSION = 3;
-    const TOURNAMENT_STAGES = Object.freeze({
-        SETUP: 'setup',
-        SCHEDULED: 'scheduled',
-        GROUP: 'group',
-        SEEDS_LOCKED: 'seeds_locked',
-        PLAYOFFS: 'playoffs',
-        FINAL: 'final',
-        COMPLETED: 'completed'
-    });
-
-    function createPlayerId(index) {
-        return `player_${String(index + 1).padStart(2, '0')}`;
-    }
-
-    function normalizePlayer(player, index) {
-        if (typeof player === 'string') return { id: createPlayerId(index), name: player };
-        if (player && typeof player === 'object' && typeof player.name === 'string') {
-            return { id: player.id || createPlayerId(index), name: player.name };
-        }
-        throw new Error(`Invalid player at roster position ${index + 1}.`);
-    }
-
-    function getPlayerById(tournament, playerId) {
-        return (tournament.playerRecords || []).find(player => player.id === playerId) || null;
-    }
-
-    function getPlayerName(tournament, playerId) {
-        const player = getPlayerById(tournament, playerId);
-        return player ? player.name : playerId;
-    }
-
-    function getRosterNames(tournament) {
-        return (tournament.playerRecords || []).map(player => player.name);
-    }
-
-    function isPlaceholderPlayer(player) {
-        return typeof player === 'string' && /^(Winner|Loser|TBD|BYE)/.test(player);
-    }
-
-    function getMatchPlayerName(tournament, match, side) {
-        const value = match && match[side];
-        if (!value) return '';
-        return getPlayerName(tournament, value);
-    }
-
-    function getNumericScore(match, side) {
-        const resultValue = match && match.result && match.result[side];
-        const legacyValue = match && match[side === 'score1' ? 's1' : 's2'];
-        return legacyValue !== undefined ? legacyValue : resultValue;
-    }
-
-    function isValidScore(score) {
-        return score === '' || (Number.isInteger(score) && score >= 0);
-    }
-
-    function resolveMatchResult(match, rules) {
-        const score1 = getNumericScore(match, 'score1');
-        const score2 = getNumericScore(match, 'score2');
-        const result = { score1, score2, winner: null, loser: null, status: 'incomplete' };
-        if (!isValidScore(score1) || !isValidScore(score2) || score1 === '' || score2 === '') return result;
-        if (score1 === score2) {
-            result.status = rules.allowTies ? 'tied' : 'invalid_tie';
-            return result;
-        }
-        const higherWins = (rules.scoreDirection || 'higherWins') === 'higherWins';
-        const player1Wins = higherWins ? score1 > score2 : score1 < score2;
-        result.winner = player1Wins ? match.p1 : match.p2;
-        result.loser = player1Wins ? match.p2 : match.p1;
-        result.status = 'completed';
-        return result;
-    }
-
-    function isCompletedMatch(match, rules = activeTournament.rules) {
-        return resolveMatchResult(match, rules).status === 'completed';
-    }
-
-    function seededRandom(seed) {
-        let value = 0;
-        String(seed || 'tournament-manager').split('').forEach(character => {
-            value = ((value << 5) - value + character.charCodeAt(0)) | 0;
-        });
-        return function nextRandom() {
-            value = (value * 1664525 + 1013904223) | 0;
-            return (value >>> 0) / 4294967296;
-        };
-    }
-
-    function selectAutomaticFormat(playerCount) {
-        if (playerCount === 2) return { strategy: 'direct-final', qualificationSize: 2, playoffSize: 2, playoffBracketType: 'F' };
-        if (playerCount <= 4) return { strategy: 'round-robin', qualificationSize: 2, playoffSize: 2, playoffBracketType: 'F' };
-        if (playerCount <= 7) return { strategy: 'round-robin', qualificationSize: 4, playoffSize: 4, playoffBracketType: 'SF' };
-        if (playerCount <= 15) return { strategy: 'swiss', qualificationSize: 4, playoffSize: 4, playoffBracketType: 'SF' };
-        return { strategy: 'swiss', qualificationSize: 8, playoffSize: 8, playoffBracketType: 'QF' };
-    }
-
-    function createCanonicalState(rawState) {
-        const state = rawState || {};
-        const rawPlayers = Array.isArray(state.players) ? state.players : [];
-        const playerRecords = rawPlayers.map(normalizePlayer);
-        const rules = {
-            resultType: 'numeric',
-            scoreDirection: state.rules && state.rules.scoreDirection === 'lowerWins' ? 'lowerWins' : 'higherWins',
-            maxPointsPerMatch: state.rules && Number.isInteger(state.rules.maxPointsPerMatch) && state.rules.maxPointsPerMatch > 0 ? state.rules.maxPointsPerMatch : 11,
-            allowTies: Boolean(state.rules && state.rules.allowTies),
-            bestOf: state.rules && state.rules.bestOf || 1,
-            setsToWin: state.rules && state.rules.setsToWin || 1
-        };
-        const format = state.format || selectAutomaticFormat(playerRecords.length);
-        const canonical = {
-            ...state,
-            schemaVersion: 3,
-            playerRecords,
-            players: playerRecords.map(player => player.name),
-            rules,
-            format: { automatic: true, ...format },
-            randomization: state.randomization || { seed: state.id || 'tournament-manager', deterministic: true },
-            stage: state.stage || (state.isTournamentActive ? TOURNAMENT_STAGES.GROUP : TOURNAMENT_STAGES.SETUP),
-            seeds: Array.isArray(state.seeds) ? state.seeds : [],
-            standings: Array.isArray(state.standings) ? state.standings : [],
-            history: Array.isArray(state.history) ? state.history : [],
-            metadata: state.metadata || { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-            champion: state.champion || null,
-            playoffStageStarted: Boolean(state.playoffStageStarted),
-            playoffSeeds: Array.isArray(state.playoffSeeds) ? state.playoffSeeds : []
-        };
-        canonical.playoffBracketType = canonical.playoffBracketType || canonical.format.playoffBracketType;
-        return canonical;
-    }
-
-    function resolvePlayerReference(tournament, reference) {
-        if (!reference || isPlaceholderPlayer(reference)) return reference || '';
-        const byId = getPlayerById(tournament, reference);
-        if (byId) return byId.id;
-        const byName = (tournament.playerRecords || []).find(player => player.name === reference);
-        return byName ? byName.id : reference;
-    }
-
-    function normalizeMatch(tournament, match, stage, index) {
-        const normalized = { ...match };
-        normalized.id = normalized.id || `${stage}_${index + 1}`;
-        normalized.stage = normalized.stage || stage;
-        normalized.p1 = resolvePlayerReference(tournament, normalized.p1);
-        normalized.p2 = resolvePlayerReference(tournament, normalized.p2);
-        normalized.result = normalized.result || {};
-        normalized.result.score1 = getNumericScore(normalized, 'score1');
-        normalized.result.score2 = getNumericScore(normalized, 'score2');
-        normalized.result.status = resolveMatchResult(normalized, tournament.rules).status;
-        return normalized;
-    }
-
-    function migrateTournamentState(rawState) {
-        const canonical = createCanonicalState(rawState);
-        canonical.groupMatches = (canonical.groupMatches || []).map((match, index) => normalizeMatch(canonical, match, 'group', index));
-        canonical.playoffMatches = Object.fromEntries(Object.entries(canonical.playoffMatches || {}).map(([key, match], index) => [key, normalizeMatch(canonical, match, 'playoff', index)]));
-        canonical.playoffBracketType = canonical.playoffBracketType || canonical.format.playoffBracketType;
-        canonical.legacyFormat = !rawState || rawState.schemaVersion !== TOURNAMENT_SCHEMA_VERSION;
-        if (canonical.mode === 'duel') canonical.stage = canonical.stage || TOURNAMENT_STAGES.FINAL;
-        if (canonical.playoffMatches && Object.values(canonical.playoffMatches).some(match => isCompletedMatch(match, canonical.rules))) {
-            canonical.playoffStageStarted = true;
-            canonical.stage = canonical.stage === TOURNAMENT_STAGES.COMPLETED ? canonical.stage : TOURNAMENT_STAGES.PLAYOFFS;
-        }
-        canonical.champion = canonical.champion || getTournamentChampionFromState(canonical);
-        if (canonical.champion) canonical.stage = TOURNAMENT_STAGES.COMPLETED;
-        return canonical;
-    }
-
-    function calculateStandingsForState(tournament) {
-        const stats = {};
-        (tournament.playerRecords || []).forEach((player, rosterIndex) => {
-            stats[player.id] = { id: player.id, name: player.name, w: 0, l: 0, diff: 0, rosterIndex, opponents: [] };
-        });
-        (tournament.groupMatches || []).forEach(match => {
-            const result = resolveMatchResult(match, tournament.rules);
-            const player1Id = resolvePlayerReference(tournament, match.p1);
-            const player2Id = resolvePlayerReference(tournament, match.p2);
-            if (result.status !== 'completed' || !stats[player1Id] || !stats[player2Id]) return;
-            stats[player1Id].diff += result.score1 - result.score2;
-            stats[player2Id].diff += result.score2 - result.score1;
-            stats[player1Id].opponents.push({ id: player2Id, won: result.winner === match.p1 });
-            stats[player2Id].opponents.push({ id: player1Id, won: result.winner === match.p2 });
-            stats[resolvePlayerReference(tournament, result.winner)].w++;
-            stats[resolvePlayerReference(tournament, result.loser)].l++;
-        });
-        const random = seededRandom(tournament.randomization && tournament.randomization.seed);
-        return Object.values(stats).sort((a, b) => {
-            const base = b.w - a.w || b.diff - a.diff;
-            if (base) return base;
-            const headToHead = (b.opponents.find(opponent => opponent.id === a.id)?.won ? 1 : 0) - (a.opponents.find(opponent => opponent.id === b.id)?.won ? 1 : 0);
-            return headToHead || (random() - 0.5) || a.rosterIndex - b.rosterIndex;
-        });
-    }
-
-    function calculateFinalSeeds(tournament) {
-        const standings = calculateStandingsForState(tournament);
-        return standings.slice(0, tournament.format.qualificationSize || standings.length).map((player, index) => ({ seed: index + 1, playerId: player.id, player: player.name }));
-    }
-
-    function getStateMatchWinner(tournament, match) {
-        const result = resolveMatchResult(match, tournament.rules);
-        return result.status === 'completed' ? result.winner : null;
-    }
-
-    function getStateMatchLoser(tournament, match) {
-        const result = resolveMatchResult(match, tournament.rules);
-        return result.status === 'completed' ? result.loser : null;
-    }
-
-    function getTournamentChampionFromState(tournament) {
-        if (tournament.mode === 'duel') return getStateMatchWinner(tournament, tournament.groupMatches[0]);
-        return getStateMatchWinner(tournament, tournament.playoffMatches && tournament.playoffMatches.final);
-    }
-
-    function makeMatch(p1, p2, label, stage = 'playoff') {
-        return { id: `${stage}_${label.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`, stage, p1, p2, s1: '', s2: '', label, result: { score1: '', score2: '', status: 'incomplete' } };
-    }
-
-    function generateBracketFromSeeds(seeds, bracketType) {
-        const players = seeds.slice().sort((a, b) => a.seed - b.seed).map(seed => seed.playerId || seed.player);
-        const matches = {};
-        if (bracketType === 'QF') {
-            if (players.length < 8) throw new Error('Eight seeds are required for a quarterfinal bracket.');
-            matches.qf1 = makeMatch(players[0], players[7], 'QF 1 (1v8)');
-            matches.qf2 = makeMatch(players[3], players[4], 'QF 2 (4v5)');
-            matches.qf3 = makeMatch(players[2], players[5], 'QF 3 (3v6)');
-            matches.qf4 = makeMatch(players[1], players[6], 'QF 4 (2v7)');
-            matches.sf1 = makeMatch('Winner QF1', 'Winner QF2', 'SF 1');
-            matches.sf2 = makeMatch('Winner QF3', 'Winner QF4', 'SF 2');
-            matches.final = makeMatch('Winner SF1', 'Winner SF2', 'Championship');
-        } else if (bracketType === 'SF') {
-            if (players.length < 4) throw new Error('Four seeds are required for a semifinal bracket.');
-            matches.sf1 = makeMatch(players[0], players[3], 'SF 1 (1v4)');
-            matches.sf2 = makeMatch(players[1], players[2], 'SF 2 (2v3)');
-            matches.final = makeMatch('Winner SF1', 'Winner SF2', 'Championship');
-            matches.third = makeMatch('Loser SF1', 'Loser SF2', 'Bronze Final');
-        } else {
-            matches.final = makeMatch(players[0], players[1], 'Championship (1v2)');
-        }
-        return matches;
-    }
-
-    function validateSchedule(tournament, matches) {
-        const seenPairs = new Set();
-        matches.forEach(match => {
-            if (match.p1 === match.p2) throw new Error('Schedule contains a self-match.');
-            const pair = [match.p1, match.p2].sort().join('|');
-            if (seenPairs.has(pair)) throw new Error('Schedule contains a duplicate pairing.');
-            seenPairs.add(pair);
-        });
-        return true;
-    }
-
-    function generateRoundRobinSchedule(tournament) {
-        const players = getRosterNames(tournament);
-        const list = players.length % 2 ? [...players, 'BYE'] : [...players];
-        const rounds = list.length - 1;
-        const half = list.length / 2;
-        const matches = [];
-        let rotation = [...list];
-        for (let round = 0; round < rounds; round++) {
-            for (let index = 0; index < half; index++) {
-                const p1 = rotation[index];
-                const p2 = rotation[rotation.length - 1 - index];
-                if (p1 !== 'BYE' && p2 !== 'BYE') matches.push({ p1, p2, s1: '', s2: '', roundId: `round_${round + 1}`, stage: 'group' });
-            }
-            rotation = [rotation[0], rotation[rotation.length - 1], ...rotation.slice(1, -1)];
-        }
-        validateSchedule(tournament, matches);
-        return matches;
-    }
-
-    function generateSwissSchedule(tournament, roundNumber = 1) {
-        const standings = calculateStandingsForState(tournament);
-        const priorPairs = new Set((tournament.groupMatches || []).map(match => [match.p1, match.p2].sort().join('|')));
-        const remaining = standings.map(player => player.name);
-        const matches = [];
-        while (remaining.length > 1) {
-            let firstIndex = 0;
-            let secondIndex = remaining.findIndex((candidate, index) => index > 0 && !priorPairs.has([remaining[0], candidate].sort().join('|')));
-            if (secondIndex < 0) secondIndex = 1;
-            const p1 = remaining.splice(firstIndex, 1)[0];
-            const p2 = remaining.splice(secondIndex - 1, 1)[0];
-            matches.push({ p1, p2, s1: '', s2: '', roundId: `round_${roundNumber}`, stage: 'swiss', pairingMeta: { strategy: 'SWISS', reason: 'similar-record', constraintsSatisfied: ['valid-participants', 'deterministic-pairing'] } });
-        }
-        if (remaining.length) matches.push({ p1: remaining[0], p2: 'BYE', s1: '', s2: '', roundId: `round_${roundNumber}`, stage: 'swiss', status: 'BYE' });
-        return matches;
-    }
-
-    function validateTournamentIntegrity(tournament) {
-        if (!Array.isArray(tournament.playerRecords) || tournament.playerRecords.length < 2) return { valid: false, errors: ['Roster must contain at least two players.'] };
-        const errors = [];
-        const ids = new Set();
-        const names = new Set();
-        tournament.playerRecords.forEach(player => {
-            if (ids.has(player.id)) errors.push(`Duplicate player id: ${player.id}`);
-            if (names.has(player.name.toLowerCase())) errors.push(`Duplicate player name: ${player.name}`);
-            ids.add(player.id);
-            names.add(player.name.toLowerCase());
-        });
-        const validateMatch = match => {
-            if (match && !match.p1 && !match.p2 && !tournament.playoffStageStarted) return;
-            if (!match || !match.p1 || !match.p2) errors.push('Match has missing participants.');
-            if (match && !isPlaceholderPlayer(match.p1) && !ids.has(resolvePlayerReference(tournament, match.p1))) errors.push(`Unknown participant: ${match.p1}`);
-            if (match && !isPlaceholderPlayer(match.p2) && !ids.has(resolvePlayerReference(tournament, match.p2))) errors.push(`Unknown participant: ${match.p2}`);
-            const result = resolveMatchResult(match || {}, tournament.rules);
-            if (result.status === 'invalid_tie') errors.push('A prohibited match tie was found.');
-            if (![result.score1, result.score2].every(score => score === '' || (Number.isInteger(score) && score >= 0 && score <= tournament.rules.maxPointsPerMatch))) errors.push('A match contains an invalid score.');
-        };
-        (tournament.groupMatches || []).forEach(validateMatch);
-        Object.values(tournament.playoffMatches || {}).forEach(validateMatch);
-        const bracketRounds = tournament.playoffBracketType === 'QF'
-            ? [['qf1', 'qf2', 'qf3', 'qf4'], ['sf1', 'sf2'], ['final']]
-            : tournament.playoffBracketType === 'SF' ? [['sf1', 'sf2'], ['final']] : [['final']];
-        bracketRounds.forEach(round => {
-            const participants = round.flatMap(key => {
-                const match = tournament.playoffMatches && tournament.playoffMatches[key];
-                return match ? [match.p1, match.p2].filter(player => player && !isPlaceholderPlayer(player)) : [];
-            });
-            if (new Set(participants).size !== participants.length) errors.push('A player appears in simultaneous playoff matches.');
-        });
-        const progression = tournament.playoffBracketType === 'QF'
-            ? [['sf1', 'qf1', 'qf2'], ['sf2', 'qf3', 'qf4']]
-            : [];
-        progression.forEach(([nextKey, firstKey, secondKey]) => {
-            const next = tournament.playoffMatches && tournament.playoffMatches[nextKey];
-            const first = tournament.playoffMatches && tournament.playoffMatches[firstKey];
-            const second = tournament.playoffMatches && tournament.playoffMatches[secondKey];
-            const expected = [getStateMatchWinner(tournament, first), getStateMatchWinner(tournament, second)];
-            if (next && expected.every(Boolean) && (next.p1 !== expected[0] || next.p2 !== expected[1])) errors.push(`${nextKey} participants do not match preceding winners.`);
-        });
-        if (tournament.playoffBracketType !== 'F') {
-            const final = tournament.playoffMatches && tournament.playoffMatches.final;
-            const expectedWinners = [getStateMatchWinner(tournament, tournament.playoffMatches && tournament.playoffMatches.sf1), getStateMatchWinner(tournament, tournament.playoffMatches && tournament.playoffMatches.sf2)];
-            if (final && expectedWinners.every(Boolean) && (final.p1 !== expectedWinners[0] || final.p2 !== expectedWinners[1])) errors.push('Championship participants do not match semifinal winners.');
-            const third = tournament.playoffMatches && tournament.playoffMatches.third;
-            const expectedLosers = [getStateMatchLoser(tournament, tournament.playoffMatches && tournament.playoffMatches.sf1), getStateMatchLoser(tournament, tournament.playoffMatches && tournament.playoffMatches.sf2)];
-            if (third && expectedLosers.every(Boolean) && (third.p1 !== expectedLosers[0] || third.p2 !== expectedLosers[1])) errors.push('Third-place participants do not match semifinal losers.');
-        }
-        const champion = getTournamentChampionFromState(tournament);
-        if (tournament.champion && tournament.champion !== champion) errors.push('Stored champion does not match the championship result.');
-        return { valid: errors.length === 0, errors, stage: tournament.stage, seedsLocked: tournament.seeds.length > 0, champion: champion || null };
-    }
-
-    function normalizeTournamentState(rawState) {
-        const normalized = migrateTournamentState(rawState);
-        const report = validateTournamentIntegrity(normalized);
-        if (!report.valid) throw new Error(report.errors.join(' '));
-        return normalized;
-    }
 
     function escapeHtml(value) {
         return String(value)
@@ -1211,27 +847,6 @@
 
         return { names };
     }
-
-    function renderFormatPreview() {
-        const preview = document.getElementById('format-preview');
-        if (!preview || activeTournament.isTournamentActive) return;
-        const count = document.querySelectorAll('.player-name-input').length;
-        if (count < 2) {
-            preview.style.display = 'none';
-            return;
-        }
-        const format = selectAutomaticFormat(count);
-        const strategy = format.strategy === 'swiss' ? 'Swiss qualification' : 'Round robin';
-        const playoff = format.playoffBracketType === 'QF' ? 'Top 8 → Quarterfinals → Semifinals → Final'
-            : format.playoffBracketType === 'SF' ? 'Top 4 → Semifinals → Final'
-                : 'Top 2 → Championship';
-        preview.innerHTML = `<strong>Recommended format:</strong> ${strategy}<br>${playoff}`;
-        preview.style.display = 'block';
-    }
-
-    document.addEventListener('input', event => {
-        if (event.target.classList && event.target.classList.contains('player-name-input')) renderFormatPreview();
-    });
 
     // Clear a field's error state as soon as the user edits it, rather than only on the next submit attempt
     document.addEventListener('input', (e) => {
@@ -1427,7 +1042,7 @@
             if(activeId) {
                 const savedState = await store.getItem(activeId);
                 if(savedState) {
-                    activeTournament = normalizeTournamentState(savedState);
+                    activeTournament = savedState;
                     restoreUIFromActiveState();
                 }
             }
@@ -1442,14 +1057,6 @@
             activeTournament.name = `Tournament ${new Date().toLocaleDateString()} (${activeTournament.players.length} Players)`;
         }
         
-        activeTournament.metadata = activeTournament.metadata || {};
-        activeTournament.metadata.updatedAt = new Date().toISOString();
-        const report = validateTournamentIntegrity(activeTournament);
-        if (!report.valid) {
-            console.error('Refusing to persist invalid tournament state:', report.errors);
-            return;
-        }
-
         try {
             await store.setItem(activeTournament.id, activeTournament);
             await indexStore.setItem('active_id', activeTournament.id);
@@ -1491,7 +1098,7 @@
         
         const targetState = await store.getItem(id);
         if(targetState) {
-            activeTournament = normalizeTournamentState(targetState);
+            activeTournament = targetState;
             await indexStore.setItem('active_id', id);
             restoreUIFromActiveState();
             toggleSettingsModal(false);
@@ -1518,26 +1125,14 @@
 
     function clearActiveStateMemory() {
         activeTournament = {
-            schemaVersion: TOURNAMENT_SCHEMA_VERSION,
             id: "",
             name: "",
             isTournamentActive: false,
             mode: 'tournament',
             players: [],
-            playerRecords: [],
             groupMatches: [],
             playoffBracketType: 'SF',
             playoffMatches: {},
-            format: selectAutomaticFormat(0),
-            randomization: { seed: 'tournament-manager', deterministic: true },
-            stage: 'setup',
-            standings: [],
-            seeds: [],
-            playoffSeeds: [],
-            playoffStageStarted: false,
-            champion: null,
-            history: [],
-            metadata: {},
             duelResultSaved: false,
             rules: {
                 maxPointsPerMatch: 11,
@@ -1592,7 +1187,6 @@
         const container = document.getElementById('matches-container');
         const buffer = [];
         const heading = activeTournament.mode === 'duel' ? '1v1 • Head to Head' : `GROUP STAGE • ${1}`;
-        const tiedGroupIndexes = [];
         activeTournament.groupMatches.forEach((m, idx) => {
             const label = activeTournament.mode === 'duel' ? heading : `GROUP STAGE • ${idx + 1}`;
             buffer.push(generateStepperHTML(m.p1, m.p2, label, 'group', idx));
@@ -1671,7 +1265,10 @@
         const reader = new FileReader();
         reader.onload = async function(e) {
             try {
-                const importedData = normalizeTournamentState(JSON.parse(e.target.result));
+                const importedData = JSON.parse(e.target.result);
+                if (!importedData.players || !importedData.rules || !importedData.groupMatches) {
+                    throw new Error("Missing structural properties required by layout definitions.");
+                }
 
                 if(activeTournament.isTournamentActive && !confirm("Discard active session context to import selection?")) return;
                 
@@ -1684,7 +1281,7 @@
                 toggleSettingsModal(false);
                 alert("Tournament payload imported into local engine storage successfully!");
             } catch (err) {
-                alert(`Import rejected: ${err.message || 'Target file is malformed or invalid.'}`);
+                alert("Import rejected: Target file is malformed or invalid.");
                 console.error(err);
             }
         };
@@ -1729,10 +1326,9 @@
         div.className = 'player-input-row';
         div.innerHTML = `<input type="text" class="player-name-input" aria-label="Athlete name" placeholder="Player ${count}" maxlength="24"><button class="btn btn-icon" aria-label="Remove player" onclick="removePlayerRow(this)"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
         container.appendChild(div);
-        renderFormatPreview();
     }
 
-    function removePlayerRow(btn) { if(!activeTournament.isTournamentActive) { btn.parentElement.remove(); renderFormatPreview(); } }
+    function removePlayerRow(btn) { if(!activeTournament.isTournamentActive) btn.parentElement.remove(); }
     
     function cleanInputDigits(str) { return str.replace(/[^\d-]/g, ''); }
 
@@ -1768,21 +1364,10 @@
         }
 
         activeTournament.players = validation.names;
-        activeTournament.playerRecords = activeTournament.players.map((name, index) => ({ id: createPlayerId(index), name }));
         const playerCount = activeTournament.players.length;
-        activeTournament.format = selectAutomaticFormat(playerCount);
-        activeTournament.randomization = { seed: `t_${Date.now()}`, deterministic: true };
-        activeTournament.seeds = [];
-        activeTournament.playoffSeeds = [];
-        activeTournament.playoffStageStarted = false;
-        activeTournament.champion = null;
-        activeTournament.history = [{ type: 'TOURNAMENT_CREATED', timestamp: new Date().toISOString() }];
-        activeTournament.metadata = { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-        renderFormatPreview();
 
         if (playerCount === 2) {
             activeTournament.mode = 'duel';
-            activeTournament.stage = TOURNAMENT_STAGES.FINAL;
             activeTournament.groupMatches = [{ p1: activeTournament.players[0], p2: activeTournament.players[1], s1: '', s2: '' }];
             activeTournament.playoffMatches = {};
             activeTournament.playoffBracketType = 'F';
@@ -1808,21 +1393,13 @@
         }
 
         activeTournament.mode = 'tournament';
-        activeTournament.stage = TOURNAMENT_STAGES.SCHEDULED;
         activeTournament.id = 't_' + Date.now();
         activeTournament.name = `Tournament ${new Date().toLocaleDateString()} (${activeTournament.players.length} Players)`;
         activeTournament.isTournamentActive = true;
         activeTournament.duelResultSaved = false;
         
         lockRosterUI(true);
-        if (activeTournament.format.strategy === 'swiss') {
-            activeTournament.groupMatches = generateSwissSchedule(activeTournament, 1);
-            activeTournament.schedule = { rounds: [1], currentRound: 1 };
-        } else {
-            generateRoundRobinMatches();
-            activeTournament.schedule = { rounds: [...new Set(activeTournament.groupMatches.map(match => match.roundId))], currentRound: 1 };
-        }
-        activeTournament.playoffBracketType = activeTournament.format.playoffBracketType;
+        generateRoundRobinMatches();
         initializeDynamicPlayoffStructure(activeTournament.players.length);
         
         setActiveModeUI();
@@ -1889,11 +1466,8 @@
 
     function initializeDynamicPlayoffStructure(num) {
         activeTournament.playoffMatches = {};
-        const bracketType = activeTournament.format && activeTournament.format.playoffBracketType
-            ? activeTournament.format.playoffBracketType
-            : (num >= 8 ? 'QF' : (num >= 4 ? 'SF' : 'F'));
-        activeTournament.playoffBracketType = bracketType;
-        if (bracketType === 'QF') {
+        if (num >= 8) {
+            activeTournament.playoffBracketType = 'QF';
             activeTournament.playoffMatches.qf1 = { p1: '', p2: '', s1: '', s2: '', label: 'QF 1 (1v8)' };
             activeTournament.playoffMatches.qf2 = { p1: '', p2: '', s1: '', s2: '', label: 'QF 2 (4v5)' };
             activeTournament.playoffMatches.qf3 = { p1: '', p2: '', s1: '', s2: '', label: 'QF 3 (3v6)' };
@@ -1902,7 +1476,8 @@
             activeTournament.playoffMatches.sf2 = { p1: 'Winner QF3', p2: 'Winner QF4', s1: '', s2: '', label: 'SF 2' };
             activeTournament.playoffMatches.final = { p1: 'Winner SF1', p2: 'Winner SF2', s1: '', s2: '', label: 'Championship' };
             activeTournament.playoffMatches.third = { p1: 'Loser SF1', p2: 'Loser SF2', s1: '', s2: '', label: 'Bronze Final' };
-        } else if (bracketType === 'SF') {
+        } else if (num >= 4) {
+            activeTournament.playoffBracketType = 'SF';
             activeTournament.playoffMatches.sf1 = { p1: '', p2: '', s1: '', s2: '', label: 'SF 1 (1v4)' };
             activeTournament.playoffMatches.sf2 = { p1: '', p2: '', s1: '', s2: '', label: 'SF 2 (2v3)' };
             activeTournament.playoffMatches.final = { p1: 'Winner SF1', p2: 'Winner SF2', s1: '', s2: '', label: 'Championship' };
@@ -1924,16 +1499,6 @@
 
     async function setScore(key, isPlayer1, val, type) {
         const matchObj = type === 'group' ? activeTournament.groupMatches[key] : activeTournament.playoffMatches[key];
-        if (!matchObj) return;
-        if (type === 'group' && activeTournament.playoffStageStarted) {
-            alert('Group-stage scores are locked after seeds are frozen. Reset the tournament to rebuild the bracket.');
-            reconstructGroupStageDOM();
-            return;
-        }
-        if (type === 'playoff' && (isPlaceholderPlayer(matchObj.p1) || isPlaceholderPlayer(matchObj.p2))) {
-            alert('This playoff match is waiting for the preceding result.');
-            return;
-        }
         let newScore;
         
         if (val === '' || val === null) {
@@ -1949,16 +1514,6 @@
         }
         
         if (isPlayer1) matchObj.s1 = newScore; else matchObj.s2 = newScore;
-        matchObj.result = {
-            score1: matchObj.s1,
-            score2: matchObj.s2,
-            ...resolveMatchResult(matchObj, activeTournament.rules)
-        };
-        activeTournament.history.push({ type: type === 'group' ? 'GROUP_RESULT_RECORDED' : 'PLAYOFF_RESULT_RECORDED', timestamp: new Date().toISOString(), matchId: matchObj.id || `${type}_${key}` });
-        if (type === 'playoff') {
-            advancePlayoffParticipants();
-            reconstructPlayoffStageDOM();
-        }
         
         const card = document.getElementById(`${type}-card-${key}`);
         if(card) {
@@ -1968,14 +1523,13 @@
         }
 
         if (activeTournament.mode === 'duel' && !activeTournament.duelResultSaved) {
-            const duelResult = resolveMatchResult(matchObj, activeTournament.rules);
-            const isComplete = duelResult.status === 'completed';
+            const isComplete = matchObj.s1 !== '' && matchObj.s2 !== '' && matchObj.s1 !== matchObj.s2;
             if (isComplete) {
-                const winner = getPlayerName(activeTournament, resolvePlayerReference(activeTournament, duelResult.winner));
+                const winner = matchObj.s1 > matchObj.s2 ? matchObj.p1 : matchObj.p2;
                 const duelRecord = {
                     id: `duel_${Date.now()}`,
-                    player1: getPlayerName(activeTournament, resolvePlayerReference(activeTournament, matchObj.p1)),
-                    player2: getPlayerName(activeTournament, resolvePlayerReference(activeTournament, matchObj.p2)),
+                    player1: matchObj.p1,
+                    player2: matchObj.p2,
                     score1: matchObj.s1,
                     score2: matchObj.s2,
                     winner,
@@ -2003,7 +1557,7 @@
         p1Display.classList.remove('is-leading'); p2Display.classList.remove('is-leading');
 
         if(isDone) {
-            if(resolveMatchResult(m, activeTournament.rules).winner === m.p1) p1Display.classList.add('is-leading');
+            if(m.s1 > m.s2) p1Display.classList.add('is-leading');
             else p2Display.classList.add('is-leading');
         }
     }
@@ -2015,10 +1569,8 @@
         const minusIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>`;
         const plusIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`;
 
-        const displayP1 = isPlaceholderPlayer(p1) ? p1 : getPlayerName(activeTournament, p1);
-        const displayP2 = isPlaceholderPlayer(p2) ? p2 : getPlayerName(activeTournament, p2);
-        const p1Label = displayP1 || 'Player 1';
-        const p2Label = displayP2 || 'Player 2';
+        const p1Label = p1 || 'Player 1';
+        const p2Label = p2 || 'Player 2';
 
         return `
             <div id="${idPrefix}" class="match-card">
@@ -2026,8 +1578,8 @@
                 <div class="match-body">
                     <div class="player-match-row p1-wrap">
                         <div class="player-identity">
-                            <div class="player-avatar p1-initials">${getInitials(displayP1)}</div>
-                            <span class="player-name p1-name" title="${escapeHtml(displayP1)}">${escapeHtml(displayP1) || 'TBD Seed'}</span>
+                            <div class="player-avatar p1-initials">${getInitials(p1)}</div>
+                            <span class="player-name p1-name" title="${p1}">${p1 || 'TBD Seed'}</span>
                         </div>
                         <div class="score-control">
                             <button class="stepper-btn" aria-label="Decrease ${p1Label} score" onclick="adjustScore(${keyArg}, true, -1, '${type}')">${minusIcon}</button>
@@ -2037,8 +1589,8 @@
                     </div>
                     <div class="player-match-row p2-wrap">
                         <div class="player-identity">
-                            <div class="player-avatar p2-initials">${getInitials(displayP2)}</div>
-                            <span class="player-name p2-name" title="${escapeHtml(displayP2)}">${escapeHtml(displayP2) || 'TBD Seed'}</span>
+                            <div class="player-avatar p2-initials">${getInitials(p2)}</div>
+                            <span class="player-name p2-name" title="${p2}">${p2 || 'TBD Seed'}</span>
                         </div>
                         <div class="score-control">
                             <button class="stepper-btn" aria-label="Decrease ${p2Label} score" onclick="adjustScore(${keyArg}, false, -1, '${type}')">${minusIcon}</button>
@@ -2059,6 +1611,7 @@
         const container = document.getElementById('matches-container');
         const buffer = [];
         activeTournament.groupMatches.forEach((m, idx) => {
+            m.s1 = ''; m.s2 = ''; 
             const label = activeTournament.mode === 'duel' ? '1v1 • Head to Head' : `GROUP STAGE • ${idx + 1}`;
             buffer.push(generateStepperHTML(m.p1, m.p2, label, 'group', idx));
         });
@@ -2090,74 +1643,52 @@
     }
 
     function calculateStandings() {
-        const standings = calculateStandingsForState(activeTournament);
-        activeTournament.standings = standings;
-        return standings;
-    }
+        if (activeTournament.mode === 'duel' && activeTournament.groupMatches.length > 0) {
+            const match = activeTournament.groupMatches[0];
+            const stats = {
+                [match.p1]: { name: match.p1, w: 0, l: 0, diff: 0 },
+                [match.p2]: { name: match.p2, w: 0, l: 0, diff: 0 }
+            };
 
-    function getPlayoffMatchWinner(key) {
-        return getStateMatchWinner(activeTournament, activeTournament.playoffMatches && activeTournament.playoffMatches[key]);
-    }
+            if (match.s1 !== '' && match.s2 !== '' && match.s1 !== match.s2) {
+                stats[match.p1].diff += (match.s1 - match.s2);
+                stats[match.p2].diff += (match.s2 - match.s1);
+                if (match.s1 > match.s2) {
+                    stats[match.p1].w++;
+                    stats[match.p2].l++;
+                } else {
+                    stats[match.p2].w++;
+                    stats[match.p1].l++;
+                }
+            }
 
-    function getPlayoffMatchLoser(key) {
-        return getStateMatchLoser(activeTournament, activeTournament.playoffMatches && activeTournament.playoffMatches[key]);
-    }
-
-    function getTournamentChampion() {
-        return getTournamentChampionFromState(activeTournament);
-    }
-
-    function advancePlayoffParticipants() {
-        const matches = activeTournament.playoffMatches;
-        if (!matches) return;
-        if (activeTournament.playoffBracketType === 'QF') {
-            const qfWinners = ['qf1', 'qf2', 'qf3', 'qf4'].map(getPlayoffMatchWinner);
-            if (qfWinners[0] && qfWinners[1]) { matches.sf1.p1 = qfWinners[0]; matches.sf1.p2 = qfWinners[1]; }
-            if (qfWinners[2] && qfWinners[3]) { matches.sf2.p1 = qfWinners[2]; matches.sf2.p2 = qfWinners[3]; }
+            return Object.values(stats).sort((a, b) => b.w - a.w || b.diff - a.diff);
         }
-        if (activeTournament.playoffBracketType !== 'F') {
-            const winners = ['sf1', 'sf2'].map(getPlayoffMatchWinner);
-            const losers = ['sf1', 'sf2'].map(getPlayoffMatchLoser);
-            if (winners.every(Boolean)) { matches.final.p1 = winners[0]; matches.final.p2 = winners[1]; }
-            if (matches.third && losers.every(Boolean)) { matches.third.p1 = losers[0]; matches.third.p2 = losers[1]; }
-        }
-        activeTournament.champion = getTournamentChampion();
-        if (activeTournament.champion) {
-            activeTournament.stage = TOURNAMENT_STAGES.COMPLETED;
-            activeTournament.metadata.completedAt = activeTournament.metadata.completedAt || new Date().toISOString();
-            activeTournament.history.push({ type: 'TOURNAMENT_COMPLETED', timestamp: new Date().toISOString(), championId: activeTournament.champion });
-        }
+
+        let stats = {};
+        activeTournament.players.forEach(p => stats[p] = { name: p, w: 0, l: 0, diff: 0 });
+
+        activeTournament.groupMatches.forEach(m => {
+            if(m.s1 !== '' && m.s2 !== '' && m.s1 !== m.s2) {
+                stats[m.p1].diff += (m.s1 - m.s2);
+                stats[m.p2].diff += (m.s2 - m.s1);
+                if(m.s1 > m.s2) { stats[m.p1].w++; stats[m.p2].l++; } 
+                else { stats[m.p2].w++; stats[m.p1].l++; }
+            }
+        });
+        return Object.values(stats).sort((a,b) => b.w - a.w || b.diff - a.diff);
     }
 
-    function lockSeedsAndCreateBracket() {
-        if (activeTournament.playoffStageStarted) return;
-        const seeds = calculateFinalSeeds(activeTournament);
-        activeTournament.seeds = seeds;
-        activeTournament.playoffSeeds = seeds;
-        activeTournament.playoffMatches = generateBracketFromSeeds(seeds, activeTournament.playoffBracketType);
-        activeTournament.playoffStageStarted = true;
-        activeTournament.stage = TOURNAMENT_STAGES.SEEDS_LOCKED;
-        activeTournament.history.push({ type: 'SEEDS_LOCKED', timestamp: new Date().toISOString(), seeds });
-        activeTournament.history.push({ type: 'BRACKET_CREATED', timestamp: new Date().toISOString() });
-    }
-
-    // Intercepts invalid form/tie configurations and commits the playoff state once.
-    async function proceedToPlayoffs() {
-        if (activeTournament.playoffStageStarted) {
-            switchTab('playoffs', 2);
-            return;
-        }
+    // Intercepts Invalid Form/Tie Configurations Instantly
+    function proceedToPlayoffs() {
         let hasTies = false;
         let missingScores = false;
 
         activeTournament.groupMatches.forEach((m, idx) => {
-            if (m.status === 'BYE') return;
-            const result = resolveMatchResult(m, activeTournament.rules);
-            if (result.status === 'incomplete') {
+            if (m.s1 === '' || m.s2 === '') {
                 missingScores = true;
-            } else if (result.status === 'invalid_tie' || (m.s1 !== '' && m.s2 !== '' && m.s1 === m.s2 && !activeTournament.rules.allowTies)) {
+            } else if (m.s1 === m.s2) {
                 hasTies = true;
-                tiedGroupIndexes.push(idx);
                 const card = document.getElementById(`group-card-${idx}`);
                 if (card) {
                     card.classList.add('error-tie');
@@ -2168,55 +1699,32 @@
             }
         });
 
-        if (hasTies) {
-            tiedGroupIndexes.forEach(index => document.getElementById(`group-card-${index}`)?.classList.add('error-tie'));
-            return;
-        }
+        if (hasTies) return;
         if (missingScores) {
             alert("Please fill out scores for all matches before moving to playoffs.");
             return;
         }
-        if (activeTournament.format.strategy === 'swiss') {
-            const targetRounds = Math.max(2, Math.ceil(Math.log2(activeTournament.players.length)));
-            const currentRound = activeTournament.schedule && activeTournament.schedule.currentRound || 1;
-            if (currentRound < targetRounds) {
-                const nextRound = currentRound + 1;
-                activeTournament.groupMatches.push(...generateSwissSchedule(activeTournament, nextRound));
-                activeTournament.schedule.currentRound = nextRound;
-                activeTournament.schedule.rounds.push(nextRound);
-                activeTournament.stage = TOURNAMENT_STAGES.GROUP;
-                renderGroupStageStructure();
-                updateUI();
-                await saveCurrentStateToStorage();
-                return;
-            }
-        }
-        try {
-            lockSeedsAndCreateBracket();
-        } catch (error) {
-            alert(error.message);
-            return;
-        }
-        activeTournament.stage = TOURNAMENT_STAGES.PLAYOFFS;
-        reconstructPlayoffStageDOM();
-        updateUI();
-        await saveCurrentStateToStorage();
         switchTab('playoffs', 2);
     }
 
     function proceedToStandings() {
-        const final = activeTournament.playoffMatches.final;
-        const result = resolveMatchResult(final, activeTournament.rules);
-        if (result.status === 'invalid_tie') {
-            const card = document.getElementById('playoff-card-final');
-            if (card) card.classList.add('error-tie');
-            return;
-        }
-        if (result.status !== 'completed') return;
-        activeTournament.champion = getTournamentChampion();
-        activeTournament.stage = TOURNAMENT_STAGES.COMPLETED;
-        activeTournament.metadata.completedAt = activeTournament.metadata.completedAt || new Date().toISOString();
-        saveCurrentStateToStorage();
+        let hasTies = false;
+        Object.keys(activeTournament.playoffMatches).forEach(key => {
+            const m = activeTournament.playoffMatches[key];
+            if (m.p1 && m.p2 && !m.p1.includes('Winner') && !m.p1.includes('Loser') && !m.p1.includes('TBD')) {
+                if (m.s1 === m.s2 && m.s1 !== '') {
+                    hasTies = true;
+                    const card = document.getElementById(`playoff-card-${key}`);
+                    if(card) {
+                        card.classList.add('error-tie');
+                        card.style.animation = 'none';
+                        card.offsetHeight; 
+                        card.style.animation = null;
+                    }
+                }
+            }
+        });
+        if (hasTies) return;
         switchTab('standings', 3);
     }
 
@@ -2237,8 +1745,7 @@
             const match = activeTournament.groupMatches[0];
             shareText = `🏸 1v1 Match Complete! ${match.p1} ${match.s1} - ${match.s2} ${match.p2}`;
         } else {
-            const champId = getTournamentChampion();
-            const champName = champId ? getPlayerName(activeTournament, champId) : 'TBD';
+            const champName = calculateStandings()[0]?.name || 'TBD';
             shareText = `🏆 Tournament Results are in! 👑 Champion: ${champName}`;
         }
 
@@ -2378,13 +1885,12 @@
         if (activeTournament.mode === 'duel') {
             const match = activeTournament.groupMatches[0];
             const finished = match && match.s1 !== '' && match.s2 !== '' && match.s1 !== match.s2;
-            const winner = finished ? getTournamentChampion() : null;
-            const winnerName = winner ? getPlayerName(activeTournament, winner) : null;
+            const winner = finished ? (match.s1 > match.s2 ? match.p1 : match.p2) : null;
             const matchesContainer = document.getElementById('matches-container');
             const bannerHtml = finished ? `
                 <div class="champion-reveal-banner" style="margin-bottom: 20px;">
                     <div class="champion-badge">1V1 WINNER</div>
-                    <div class="champion-name-text">${escapeHtml(winnerName)}</div>
+                    <div class="champion-name-text">${winner}</div>
                     <div style="margin-top: 20px; font-family: var(--font-body); font-weight: 700; color: var(--void-black); font-size: 1.05rem;">${match.p1} ${match.s1} - ${match.s2} ${match.p2}</div>
                     <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center;">
                         <button class="btn btn-share share-btn" onclick="shareResults()" style="font-size: 1rem; padding: 14px 24px; width: auto; max-width: 280px;">
@@ -2442,38 +1948,66 @@
                 <td style="text-align: center; font-weight:700; padding-right: 20px; color: ${p.diff > 0 ? 'var(--electric-yellow)' : (p.diff < 0 ? 'var(--action-orange)' : 'inherit')};">${p.diff > 0 ? '+' : ''}${p.diff}</td>
             </tr>`).join('');
 
-        const allGroupStageScored = activeTournament.groupMatches.length > 0 && activeTournament.groupMatches.every(m => m.status === 'BYE' || (m.s1 !== '' && m.s2 !== ''));
-        const allGroupStageCompleted = activeTournament.groupMatches.length > 0 && activeTournament.groupMatches.every(m => m.status === 'BYE' || isCompletedMatch(m, activeTournament.rules));
-        const playoffsStarted = activeTournament.playoffStageStarted;
-
-        if (activeTournament.isTournamentActive && activeTournament.groupMatches.length > 0 && !playoffsStarted) {
+        let allGroupStageScored = activeTournament.groupMatches.length > 0 && activeTournament.groupMatches.every(m => m.s1 !== '' && m.s2 !== '');
+        let allGroupStageCompleted = activeTournament.groupMatches.length > 0 && activeTournament.groupMatches.every(m => m.s1 !== '' && m.s2 !== '' && m.s1 !== m.s2);
+        
+        // Permanent Visibility Action Hub Setup for Interactive Error Tracking
+        if(activeTournament.isTournamentActive && activeTournament.groupMatches.length > 0) {
             document.getElementById('matches-to-playoffs-action').style.display = 'block';
-            document.getElementById('matches-action-desc').innerText = !allGroupStageScored
-                ? "Group stage matches in progress."
-                : (!allGroupStageCompleted ? "Please resolve any tied matches before proceeding." : "All group stage matches completed.");
-            activeTournament.groupMatches.forEach((match, index) => {
-                const result = resolveMatchResult(match, activeTournament.rules);
-                const card = document.getElementById(`group-card-${index}`);
-                if (card && result.status === 'invalid_tie') card.classList.add('error-tie');
-            });
+            if(!allGroupStageScored) {
+                document.getElementById('matches-action-desc').innerText = "Group stage matches in progress.";
+            } else if (!allGroupStageCompleted) {
+                document.getElementById('matches-action-desc').innerText = "Please resolve any tied matches before proceeding.";
+            } else {
+                document.getElementById('matches-action-desc').innerText = "All group stage matches completed.";
+            }
+
+            if (allGroupStageCompleted) {
+                document.getElementById('bracket-lock').style.display = 'none';
+                document.getElementById('bracket-container').style.display = 'block';
+
+                if (activeTournament.playoffBracketType === 'QF') {
+                    activeTournament.playoffMatches.qf1.p1 = standings[0].name; activeTournament.playoffMatches.qf1.p2 = standings[7].name;
+                    activeTournament.playoffMatches.qf4.p1 = standings[1].name; activeTournament.playoffMatches.qf4.p2 = standings[6].name;
+                    activeTournament.playoffMatches.qf3.p1 = standings[2].name; activeTournament.playoffMatches.qf3.p2 = standings[5].name;
+                    activeTournament.playoffMatches.qf2.p1 = standings[3].name; activeTournament.playoffMatches.qf2.p2 = standings[4].name;
+                    
+                    ['qf1', 'qf2', 'qf3', 'qf4'].forEach(q => syncDOM('playoff', q));
+                    
+                    activeTournament.playoffMatches.sf1.p1 = getWinner('qf1') || 'Winner QF1'; activeTournament.playoffMatches.sf1.p2 = getWinner('qf2') || 'Winner QF2';
+                    activeTournament.playoffMatches.sf2.p1 = getWinner('qf3') || 'Winner QF3'; activeTournament.playoffMatches.sf2.p2 = getWinner('qf4') || 'Winner QF4';
+                } else if (activeTournament.playoffBracketType === 'SF') {
+                    activeTournament.playoffMatches.sf1.p1 = standings[0].name; activeTournament.playoffMatches.sf1.p2 = standings[3].name;
+                    activeTournament.playoffMatches.sf2.p1 = standings[1].name; activeTournament.playoffMatches.sf2.p2 = standings[2].name;
+                } else if (activeTournament.playoffBracketType === 'F') {
+                    activeTournament.playoffMatches.final.p1 = standings[0].name; activeTournament.playoffMatches.final.p2 = standings[1].name;
+                }
+
+                if (activeTournament.playoffBracketType !== 'F') {
+                    ['sf1', 'sf2'].forEach(s => syncDOM('playoff', s));
+                    activeTournament.playoffMatches.final.p1 = getWinner('sf1') || 'Winner SF1'; activeTournament.playoffMatches.final.p2 = getWinner('sf2') || 'Winner SF2';
+                    activeTournament.playoffMatches.third.p1 = getLoser('sf1') || 'Loser SF1'; activeTournament.playoffMatches.third.p2 = getLoser('sf2') || 'Loser SF2';
+                }
+                
+                ['final', 'third'].forEach(f => syncDOM('playoff', f));
+            } else {
+                document.getElementById('bracket-lock').style.display = 'block';
+                document.getElementById('bracket-container').style.display = 'none';
+            }
         } else {
             document.getElementById('matches-to-playoffs-action').style.display = 'none';
         }
-
-        document.getElementById('bracket-lock').style.display = playoffsStarted ? 'none' : 'block';
-        document.getElementById('bracket-container').style.display = playoffsStarted ? 'block' : 'none';
 
         const fin = activeTournament.playoffMatches.final;
         if(fin && fin.s1 !== '' && fin.s2 !== '' && fin.s1 !== fin.s2) {
             document.getElementById('playoffs-to-leaderboard-action').style.display = 'block';
             document.getElementById('playoffs-action-desc').innerText = "Tournament concluded.";
-            const champ = getTournamentChampion();
-            const champName = champ ? getPlayerName(activeTournament, champ) : 'TBD';
+            const champ = fin.s1 > fin.s2 ? fin.p1 : fin.p2;
             
             document.getElementById('champion-announcement-zone').innerHTML = `
                 <div class="champion-reveal-banner">
                     <div class="champion-badge">GRAND CHAMPION</div>
-                    <div class="champion-name-text">${escapeHtml(champName)}</div>
+                    <div class="champion-name-text">${champ}</div>
                     <div style="margin-top: 32px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center;">
                         <button class="btn btn-action share-btn" onclick="shareResults()" style="font-size: 1.1rem; padding: 14px 24px; border: 2px solid var(--void-black); width: auto; max-width: 280px;">
                             <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
@@ -2493,19 +2027,17 @@
         }
     }
 
-    function getWinner(key) { return getPlayoffMatchWinner(key); }
-    function getLoser(key) { return getPlayoffMatchLoser(key); }
+    function getWinner(key) { const m = activeTournament.playoffMatches[key]; return (m.s1 !== '' && m.s2 !== '' && m.s1 !== m.s2) ? (m.s1 > m.s2 ? m.p1 : m.p2) : null; }
+    function getLoser(key) { const m = activeTournament.playoffMatches[key]; return (m.s1 !== '' && m.s2 !== '' && m.s1 !== m.s2) ? (m.s1 < m.s2 ? m.p1 : m.p2) : null; }
 
     function syncDOM(type, key) {
         const m = activeTournament.playoffMatches[key];
         const card = document.getElementById(`${type}-card-${key}`);
         if(card && m) {
-            const p1 = isPlaceholderPlayer(m.p1) ? m.p1 : getPlayerName(activeTournament, m.p1);
-            const p2 = isPlaceholderPlayer(m.p2) ? m.p2 : getPlayerName(activeTournament, m.p2);
-            card.querySelector('.p1-name').innerText = p1 || 'TBD Seed';
-            card.querySelector('.p1-initials').innerText = getInitials(p1);
-            card.querySelector('.p2-name').innerText = p2 || 'TBD Seed';
-            card.querySelector('.p2-initials').innerText = getInitials(p2);
+            card.querySelector('.p1-name').innerText = m.p1 || 'TBD Seed';
+            card.querySelector('.p1-initials').innerText = getInitials(m.p1);
+            card.querySelector('.p2-name').innerText = m.p2 || 'TBD Seed';
+            card.querySelector('.p2-initials').innerText = getInitials(m.p2);
         }
     }
 </script>
